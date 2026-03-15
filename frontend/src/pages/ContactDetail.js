@@ -1,13 +1,12 @@
 import React from "react";
-import { useSelector } from "react-redux";
 import { useParams, Link } from "react-router-dom";
+import { useGetContactsQuery } from "../features/apiSlice";
 import { getInitials } from "../hooks/useContactHelpers";
 
 const ContactDetail = () => {
   const { id } = useParams();
-  const contact = useSelector((state) =>
-    state.contacts.contacts.find((c) => String(c.id) === id),
-  );
+  const { data: contacts = [] } = useGetContactsQuery();
+  const contact = contacts.find((c) => String(c.id) === id);
 
   if (!contact) {
     return (

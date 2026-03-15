@@ -1,12 +1,14 @@
 import { configureStore } from "@reduxjs/toolkit";
-import contactsReducer from "../features/contactsSlice";
+import { contactsApi } from "../features/apiSlice";
 import notificationReducer from "../features/notificationSlice";
 
 const store = configureStore({
   reducer: {
-    contacts: contactsReducer,
+    [contactsApi.reducerPath]: contactsApi.reducer,
     notification: notificationReducer,
   },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware().concat(contactsApi.middleware),
 });
 
 export default store;

@@ -1,15 +1,17 @@
 import React, { useState, useMemo } from "react";
-import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
-import { removeContact } from "../features/contactsSlice";
+import {
+  useGetContactsQuery,
+  useDeleteContactMutation,
+} from "../features/apiSlice";
 import { getInitials } from "../hooks/useContactHelpers";
 import ConfirmDialog from "../components/ui/ConfirmDialog";
 
 const CONTACTS_PER_PAGE = 5;
 
 const ContactList = () => {
-  const dispatch = useDispatch();
-  const { contacts } = useSelector((state) => state.contacts);
+  const { data: contacts = [], isLoading, error } = useGetContactsQuery();
+  const [deleteContact] = useDeleteContactMutation();
   const [searchTerm, setSearchTerm] = useState("");
   const [deleteId, setDeleteId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -37,10 +39,18 @@ const ContactList = () => {
 
   const handleDelete = () => {
     if (deleteId !== null) {
-      dispatch(removeContact(deleteId));
+      deleteContact(deleteId);
       setDeleteId(null);
     }
   };
+
+  if (isLoading) {
+    return <div className="loading-spinner">Loading contacts...</div>;
+  }
+
+  if (error) {
+    return <div className="error-message">Failed to load contacts.</div>;
+  }
 
   const renderContactList = paginatedContacts.map((contact) => {
     return (

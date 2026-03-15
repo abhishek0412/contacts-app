@@ -1,2 +1,6 @@
-export { fetchContacts, addContact, removeContact } from "./contactsSlice";
+export {
+  useGetContactsQuery,
+  useAddContactMutation,
+  useDeleteContactMutation,
+} from "./apiSlice";
 export { showNotification, clearNotification } from "./notificationSlice";

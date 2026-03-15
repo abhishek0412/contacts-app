@@ -1,9 +1,9 @@
 import React from "react";
-import { useSelector } from "react-redux";
 import { Link, NavLink } from "react-router-dom";
+import { useGetContactsQuery } from "../features/apiSlice";
 
 const Header = () => {
-  const { contacts } = useSelector((state) => state.contacts);
+  const { data: contacts = [] } = useGetContactsQuery();
 
   return (
     <div className="app-header">

@@ -1,10 +1,9 @@
 import React from "react";
-import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { addContact } from "../features/contactsSlice";
+import { useAddContactMutation } from "../features/apiSlice";
 
 const contactSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -15,7 +14,7 @@ const contactSchema = z.object({
 });
 
 const AddContacts = () => {
-  const dispatch = useDispatch();
+  const [addContact] = useAddContactMutation();
   const navigate = useNavigate();
   const {
     register,
@@ -25,8 +24,8 @@ const AddContacts = () => {
     resolver: zodResolver(contactSchema),
   });
 
-  const onSubmit = (data) => {
-    dispatch(addContact(data));
+  const onSubmit = async (data) => {
+    await addContact(data);
     navigate("/");
   };
 
