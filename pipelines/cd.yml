@@ -39,7 +39,7 @@ pool:
   vmImage: "ubuntu-latest"
 
 variables:
-  azureSubscription: "Visual Studio Enterprise Subscription (325abee5-c245-44b6-878e-47781a6fa8aa)" # Azure DevOps service connection name
+  azureSubscription: "contacts-app" # Azure DevOps service connection name
   acrName: "contactsappacr" # Azure Container Registry name
   imageVersion: "${{ parameters.imageVersion }}"
   imageTag: "$(imageVersion)-$(resources.pipeline.ci.runID)"
