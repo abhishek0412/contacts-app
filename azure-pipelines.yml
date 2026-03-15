@@ -4,129 +4,200 @@
 trigger: none
 pr: none
 
+parameters:
+  - name: imageVersion
+    displayName: "Image Version Tag (e.g. 1.0.0)"
+    type: string
+    default: "1.0.0"
+
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: "ubuntu-latest"
 
 variables:
-  nodeVersion: '22.x'
-  buildTag: '$(Build.BuildId)'
+  nodeVersion: "22.x"
+  imageVersion: "${{ parameters.imageVersion }}"
+  imageTag: "$(imageVersion)-$(Build.BuildId)"
 
 stages:
   # ──────────────────────────────────────────────
   # Stage 1: API Integration Tests
   # ──────────────────────────────────────────────
   - stage: Test_API
-    displayName: 'API Tests'
+    displayName: "API Tests"
     jobs:
       - job: ServerTests
-        displayName: 'Server Integration Tests'
+        displayName: "Server Integration Tests"
         steps:
           - task: NodeTool@0
             inputs:
-              versionSpec: '$(nodeVersion)'
-            displayName: 'Install Node.js'
+              versionSpec: "$(nodeVersion)"
+            displayName: "Install Node.js"
 
           - script: |
               cd server-api
               npm ci
               npm install --no-save jest-junit
-            displayName: 'Install dependencies'
+            displayName: "Install dependencies"
 
           - script: |
               cd server-api
               npx jest --verbose --ci --reporters=default --reporters=jest-junit
-            displayName: 'Run API tests'
+            displayName: "Run API tests"
             env:
-              JEST_JUNIT_OUTPUT_DIR: '$(System.DefaultWorkingDirectory)/server-api/test-results'
-              JEST_JUNIT_OUTPUT_NAME: 'api-results.xml'
+              JEST_JUNIT_OUTPUT_DIR: "$(System.DefaultWorkingDirectory)/server-api/test-results"
+              JEST_JUNIT_OUTPUT_NAME: "api-results.xml"
 
           - task: PublishTestResults@2
             inputs:
-              testResultsFormat: 'JUnit'
-              testResultsFiles: 'server-api/test-results/*.xml'
-              testRunTitle: 'API Integration Tests'
+              testResultsFormat: "JUnit"
+              testResultsFiles: "server-api/test-results/*.xml"
+              testRunTitle: "API Integration Tests"
             condition: succeededOrFailed()
-            displayName: 'Publish API test results'
+            displayName: "Publish API test results"
 
   # ──────────────────────────────────────────────
   # Stage 2: Frontend Unit Tests (parallel with API)
   # ──────────────────────────────────────────────
   - stage: Test_Frontend
-    displayName: 'Frontend Tests'
+    displayName: "Frontend Tests"
     dependsOn: []
     jobs:
       - job: FrontendTests
-        displayName: 'Frontend Unit Tests'
+        displayName: "Frontend Unit Tests"
         steps:
           - task: NodeTool@0
             inputs:
-              versionSpec: '$(nodeVersion)'
-            displayName: 'Install Node.js'
+              versionSpec: "$(nodeVersion)"
+            displayName: "Install Node.js"
 
           - script: |
               cd frontend
               npm ci
               npm install --no-save jest-junit
-            displayName: 'Install dependencies'
+            displayName: "Install dependencies"
 
           - script: |
               cd frontend
               npx react-scripts test --ci --watchAll=false --reporters=default --reporters=jest-junit
-            displayName: 'Run frontend tests'
+            displayName: "Run frontend tests"
             env:
-              JEST_JUNIT_OUTPUT_DIR: '$(System.DefaultWorkingDirectory)/frontend/test-results'
-              JEST_JUNIT_OUTPUT_NAME: 'frontend-results.xml'
-              CI: 'true'
+              JEST_JUNIT_OUTPUT_DIR: "$(System.DefaultWorkingDirectory)/frontend/test-results"
+              JEST_JUNIT_OUTPUT_NAME: "frontend-results.xml"
+              CI: "true"
 
           - task: PublishTestResults@2
             inputs:
-              testResultsFormat: 'JUnit'
-              testResultsFiles: 'frontend/test-results/*.xml'
-              testRunTitle: 'Frontend Unit Tests'
+              testResultsFormat: "JUnit"
+              testResultsFiles: "frontend/test-results/*.xml"
+              testRunTitle: "Frontend Unit Tests"
             condition: succeededOrFailed()
-            displayName: 'Publish frontend test results'
+            displayName: "Publish frontend test results"
 
   # ──────────────────────────────────────────────
-  # Stage 3: Build Docker Images (after tests pass)
+  # Stage 3: E2E Tests (after unit/integration tests)
   # ──────────────────────────────────────────────
-  - stage: Build_Docker
-    displayName: 'Build Docker Images'
+  - stage: Test_E2E
+    displayName: "E2E Tests"
     dependsOn:
       - Test_API
       - Test_Frontend
     jobs:
+      - job: PlaywrightTests
+        displayName: "Playwright E2E Tests"
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "$(nodeVersion)"
+            displayName: "Install Node.js"
+
+          - script: |
+              cd server-api
+              npm ci
+            displayName: "Install API dependencies"
+
+          - script: |
+              cd frontend
+              npm ci
+            displayName: "Install frontend dependencies"
+
+          - script: |
+              npm ci
+              npx playwright install --with-deps chromium
+            displayName: "Install Playwright & Chromium"
+
+          - script: |
+              npx playwright test --reporter=list,junit
+            displayName: "Run E2E tests"
+            env:
+              CI: "true"
+              PLAYWRIGHT_JUNIT_OUTPUT_NAME: "$(System.DefaultWorkingDirectory)/e2e-results/e2e-results.xml"
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: "JUnit"
+              testResultsFiles: "e2e-results/*.xml"
+              testRunTitle: "E2E Tests"
+            condition: succeededOrFailed()
+            displayName: "Publish E2E test results"
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: "$(System.DefaultWorkingDirectory)/test-results"
+              ArtifactName: "playwright-screenshots"
+              publishLocation: "Container"
+            condition: failed()
+            displayName: "Publish failure screenshots"
+
+  # ──────────────────────────────────────────────
+  # Stage 4: Build Docker Images (after all tests pass)
+  # ──────────────────────────────────────────────
+  - stage: Build_Docker
+    displayName: "Build Docker Images"
+    dependsOn:
+      - Test_E2E
+    jobs:
       - job: BuildImages
-        displayName: 'Build & Export Docker Images'
+        displayName: "Build & Export Docker Images"
         steps:
           - script: |
               docker build \
-                -t contacts-app-api:$(buildTag) \
+                -t contacts-app-api:$(imageTag) \
+                -t contacts-app-api:$(imageVersion) \
+                -t contacts-app-api:latest \
                 -f server-api/Dockerfile \
                 server-api/
-            displayName: 'Build API image'
+            displayName: "Build API image"
 
           - script: |
               docker build \
-                -t contacts-app-frontend:$(buildTag) \
+                -t contacts-app-frontend:$(imageTag) \
+                -t contacts-app-frontend:$(imageVersion) \
+                -t contacts-app-frontend:latest \
                 -f frontend/Dockerfile \
                 frontend/
-            displayName: 'Build Frontend image'
+            displayName: "Build Frontend image"
 
           - script: |
               mkdir -p $(Build.ArtifactStagingDirectory)/docker
 
-              docker save contacts-app-api:$(buildTag) \
-                -o $(Build.ArtifactStagingDirectory)/docker/contacts-app-api.tar
+              docker save \
+                contacts-app-api:$(imageTag) \
+                contacts-app-api:$(imageVersion) \
+                contacts-app-api:latest \
+                -o $(Build.ArtifactStagingDirectory)/docker/contacts-app-api-$(imageTag).tar
 
-              docker save contacts-app-frontend:$(buildTag) \
-                -o $(Build.ArtifactStagingDirectory)/docker/contacts-app-frontend.tar
+              docker save \
+                contacts-app-frontend:$(imageTag) \
+                contacts-app-frontend:$(imageVersion) \
+                contacts-app-frontend:latest \
+                -o $(Build.ArtifactStagingDirectory)/docker/contacts-app-frontend-$(imageTag).tar
 
               cp docker-compose.yml $(Build.ArtifactStagingDirectory)/docker/
-            displayName: 'Export images as tar files'
+            displayName: "Export images as tar files"
 
           - task: PublishBuildArtifacts@1
             inputs:
-              PathtoPublish: '$(Build.ArtifactStagingDirectory)/docker'
-              ArtifactName: 'docker-images'
-              publishLocation: 'Container'
-            displayName: 'Publish Docker artifacts'
+              PathtoPublish: "$(Build.ArtifactStagingDirectory)/docker"
+              ArtifactName: "docker-images"
+              publishLocation: "Container"
+            displayName: "Publish Docker artifacts"

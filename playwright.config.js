@@ -6,7 +6,7 @@ module.exports = defineConfig({
   retries: 0,
   use: {
     baseURL: "http://localhost:3000",
-    headless: false,
+    headless: !!process.env.CI,
     screenshot: "only-on-failure",
   },
   projects: [
