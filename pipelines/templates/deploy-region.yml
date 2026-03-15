@@ -74,21 +74,21 @@ jobs:
 
             # Canary: set traffic split if not 100%
             - ${{ if ne(parameters.canaryPercentage, 100) }}:
-              - task: AzureCLI@2
-                inputs:
-                  azureSubscription: "${{ parameters.azureSubscription }}"
-                  scriptType: "bash"
-                  scriptLocation: "inlineScript"
-                  inlineScript: |
-                    SUFFIX="${{ parameters.envSuffix }}"
-                    RG="${{ parameters.resourceGroup }}"
+                - task: AzureCLI@2
+                  inputs:
+                    azureSubscription: "${{ parameters.azureSubscription }}"
+                    scriptType: "bash"
+                    scriptLocation: "inlineScript"
+                    inlineScript: |
+                      SUFFIX="${{ parameters.envSuffix }}"
+                      RG="${{ parameters.resourceGroup }}"
 
-                    echo "=== Setting canary traffic: ${{ parameters.canaryPercentage }}% to latest ==="
-                    az containerapp ingress traffic set \
-                      --name "contacts-frontend-${SUFFIX}" \
-                      --resource-group "$RG" \
-                      --revision-weight latest=${{ parameters.canaryPercentage }}
-                displayName: "Set canary traffic (${{ parameters.canaryPercentage }}%)"
+                      echo "=== Setting canary traffic: ${{ parameters.canaryPercentage }}% to latest ==="
+                      az containerapp ingress traffic set \
+                        --name "contacts-frontend-${SUFFIX}" \
+                        --resource-group "$RG" \
+                        --revision-weight latest=${{ parameters.canaryPercentage }}
+                  displayName: "Set canary traffic (${{ parameters.canaryPercentage }}%)"
 
             - task: AzureCLI@2
               inputs:

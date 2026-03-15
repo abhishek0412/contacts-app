@@ -11,8 +11,8 @@ pr: none
 resources:
   pipelines:
     - pipeline: ci
-      source: "contacts-app-ci"   # Name of CI pipeline in Azure DevOps
-      trigger: none               # No auto-trigger — manual only
+      source: "contacts-app-ci" # Name of CI pipeline in Azure DevOps
+      trigger: none # No auto-trigger — manual only
 
 parameters:
   - name: imageVersion
@@ -39,8 +39,8 @@ pool:
   vmImage: "ubuntu-latest"
 
 variables:
-  azureSubscription: "azure-service-connection"      # Azure DevOps service connection name
-  acrName: "contactsappacr"                          # Azure Container Registry name
+  azureSubscription: "azure-service-connection" # Azure DevOps service connection name
+  acrName: "contactsappacr" # Azure Container Registry name
   imageVersion: "${{ parameters.imageVersion }}"
   imageTag: "$(imageVersion)-$(resources.pipeline.ci.runID)"
   resourceGroupDev: "rg-contacts-dev"
