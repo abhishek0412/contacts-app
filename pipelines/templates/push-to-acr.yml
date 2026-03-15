@@ -9,8 +9,6 @@ parameters:
     type: string
   - name: imageVersion
     type: string
-  - name: ciRunId
-    type: string
 
 jobs:
   - job: PushToACR
@@ -22,7 +20,7 @@ jobs:
           project: "$(System.TeamProjectId)"
           pipeline: "$(resources.pipeline.ci.pipelineID)"
           runVersion: "specific"
-          runId: "${{ parameters.ciRunId }}"
+          runId: "$(resources.pipeline.ci.runID)"
           artifact: "docker-images"
           path: "$(Pipeline.Workspace)/docker-images"
         displayName: "Download CI artifacts"
