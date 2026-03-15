@@ -1,0 +1,53 @@
+# Template: Playwright E2E tests (non-blocking)
+
+parameters:
+  - name: nodeVersion
+    type: string
+
+jobs:
+  - job: PlaywrightTests
+    displayName: "Playwright E2E Tests"
+    steps:
+      - task: NodeTool@0
+        inputs:
+          versionSpec: "${{ parameters.nodeVersion }}"
+        displayName: "Install Node.js"
+
+      - script: |
+          cd server-api
+          npm ci
+        displayName: "Install API dependencies"
+
+      - script: |
+          cd frontend
+          npm ci
+        displayName: "Install frontend dependencies"
+
+      - script: |
+          npm ci
+          npx playwright install --with-deps chromium
+        displayName: "Install Playwright & Chromium"
+
+      - script: |
+          npx playwright test --reporter=list,junit
+        displayName: "Run E2E tests"
+        continueOnError: true
+        env:
+          CI: "true"
+          PLAYWRIGHT_JUNIT_OUTPUT_NAME: "$(System.DefaultWorkingDirectory)/e2e-results/e2e-results.xml"
+
+      - task: PublishTestResults@2
+        inputs:
+          testResultsFormat: "JUnit"
+          testResultsFiles: "e2e-results/*.xml"
+          testRunTitle: "E2E Tests"
+        condition: succeededOrFailed()
+        displayName: "Publish E2E test results"
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: "$(System.DefaultWorkingDirectory)/test-results"
+          ArtifactName: "playwright-screenshots"
+          publishLocation: "Container"
+        condition: failed()
+        displayName: "Publish failure screenshots"

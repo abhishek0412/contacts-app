@@ -1,16 +1,6 @@
 # ╔══════════════════════════════════════════════════════════╗
-# ║  Contacts App — Pipeline Router                         ║
-# ║                                                          ║
-# ║  Pipelines have been restructured into:                  ║
-# ║    pipelines/ci.yml  — CI pipeline (test, scan, build)   ║
-# ║    pipelines/cd.yml  — CD pipeline (deploy to Azure)     ║
-# ║                                                          ║
-# ║  In Azure DevOps, create two pipelines:                  ║
-# ║    1. "contacts-app-ci"  → pointing to pipelines/ci.yml  ║
-# ║    2. "contacts-app-cd"  → pointing to pipelines/cd.yml  ║
-# ║                                                          ║
-# ║  This file is kept for backward compatibility.           ║
-# ║  It mirrors the CI pipeline.                             ║
+# ║  CI Pipeline — Contacts App                             ║
+# ║  Manual trigger only. Produces Docker tar artifacts.    ║
 # ╚══════════════════════════════════════════════════════════╝
 
 trigger: none
@@ -31,38 +21,49 @@ variables:
   imageTag: "$(imageVersion)-$(Build.BuildId)"
 
 stages:
+  # ── Stage 0: Secret Scanning ───────────────────────────
   - stage: Secret_Scan
     displayName: "Secret Scan"
     jobs:
-      - template: pipelines/templates/security-scan.yml
+      - template: templates/security-scan.yml
 
+  # ── Stage 1: API Tests (after secret scan) ─────────────
   - stage: Test_API
     displayName: "API Tests"
-    dependsOn: [Secret_Scan]
+    dependsOn:
+      - Secret_Scan
     jobs:
-      - template: pipelines/templates/test-api.yml
+      - template: templates/test-api.yml
         parameters:
           nodeVersion: $(nodeVersion)
 
+  # ── Stage 2: Frontend Tests (parallel with API) ────────
   - stage: Test_Frontend
     displayName: "Frontend Tests"
-    dependsOn: [Secret_Scan]
+    dependsOn:
+      - Secret_Scan
     jobs:
-      - template: pipelines/templates/test-frontend.yml
+      - template: templates/test-frontend.yml
         parameters:
           nodeVersion: $(nodeVersion)
 
+  # ── Stage 3: E2E Tests (non-blocking) ──────────────────
   - stage: Test_E2E
     displayName: "E2E Tests (non-blocking)"
-    dependsOn: [Test_API, Test_Frontend]
+    dependsOn:
+      - Test_API
+      - Test_Frontend
     jobs:
-      - template: pipelines/templates/test-e2e.yml
+      - template: templates/test-e2e.yml
         parameters:
           nodeVersion: $(nodeVersion)
 
+  # ── Stage 4: Build Docker Images ───────────────────────
+  # Runs even if E2E fails (flaky UI tests)
   - stage: Build_Docker
     displayName: "Build Docker Images"
-    dependsOn: [Test_E2E]
+    dependsOn:
+      - Test_E2E
     condition: |
       and(
         not(failed('Test_API')),
@@ -70,8 +71,7 @@ stages:
         not(canceled())
       )
     jobs:
-      - template: pipelines/templates/build-docker.yml
+      - template: templates/build-docker.yml
         parameters:
           imageTag: $(imageTag)
           imageVersion: $(imageVersion)
-            displayName: "Publish Docker artifacts"

@@ -20,7 +20,9 @@ FROM nginx:1.27-alpine
 # Remove default config
 RUN rm /etc/nginx/conf.d/default.conf
 
-COPY nginx.conf /etc/nginx/conf.d/
+# Copy nginx config as template (envsubst at startup)
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+COPY entrypoint.sh /entrypoint.sh
 
 # Copy built assets
 COPY --from=build /app/build /usr/share/nginx/html
@@ -29,14 +31,21 @@ COPY --from=build /app/build /usr/share/nginx/html
 RUN chown -R nginx:nginx /usr/share/nginx/html \
     && chown -R nginx:nginx /var/cache/nginx \
     && chown -R nginx:nginx /var/log/nginx \
+    && chown -R nginx:nginx /etc/nginx/conf.d \
+    && mkdir -p /etc/nginx/templates \
+    && chown -R nginx:nginx /etc/nginx/templates \
     && touch /var/run/nginx.pid \
-    && chown nginx:nginx /var/run/nginx.pid
+    && chown nginx:nginx /var/run/nginx.pid \
+    && chmod +x /entrypoint.sh
 
 USER nginx
 
 EXPOSE 80
 
+# Default API URL — matches docker-compose service name
+ENV API_PROXY_PASS=http://api:3001/
+
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
   CMD wget -qO- http://127.0.0.1:80/ || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/entrypoint.sh"]

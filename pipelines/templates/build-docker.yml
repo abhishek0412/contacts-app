@@ -1,0 +1,84 @@
+# Template: Build Docker images, scan, export as tar artifacts
+
+parameters:
+  - name: imageTag
+    type: string
+  - name: imageVersion
+    type: string
+
+jobs:
+  - job: BuildImages
+    displayName: "Build & Export Docker Images"
+    steps:
+      - script: |
+          HADOLINT_VERSION="2.12.0"
+          curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" \
+            -o /usr/local/bin/hadolint
+          chmod +x /usr/local/bin/hadolint
+        displayName: "Install Hadolint"
+
+      - script: |
+          echo "--- Linting server-api/Dockerfile ---"
+          hadolint server-api/Dockerfile
+          echo "--- Linting frontend/Dockerfile ---"
+          hadolint frontend/Dockerfile
+        displayName: "Lint Dockerfiles (Hadolint)"
+
+      - script: |
+          docker build \
+            -t contacts-app-api:${{ parameters.imageTag }} \
+            -t contacts-app-api:${{ parameters.imageVersion }} \
+            -t contacts-app-api:latest \
+            -f server-api/Dockerfile \
+            server-api/
+        displayName: "Build API image"
+
+      - script: |
+          docker build \
+            -t contacts-app-frontend:${{ parameters.imageTag }} \
+            -t contacts-app-frontend:${{ parameters.imageVersion }} \
+            -t contacts-app-frontend:latest \
+            -f frontend/Dockerfile \
+            frontend/
+        displayName: "Build Frontend image"
+
+      - script: |
+          mkdir -p $(Build.ArtifactStagingDirectory)/docker
+
+          docker save \
+            contacts-app-api:${{ parameters.imageTag }} \
+            contacts-app-api:${{ parameters.imageVersion }} \
+            contacts-app-api:latest \
+            -o $(Build.ArtifactStagingDirectory)/docker/contacts-app-api-${{ parameters.imageTag }}.tar
+
+          docker save \
+            contacts-app-frontend:${{ parameters.imageTag }} \
+            contacts-app-frontend:${{ parameters.imageVersion }} \
+            contacts-app-frontend:latest \
+            -o $(Build.ArtifactStagingDirectory)/docker/contacts-app-frontend-${{ parameters.imageTag }}.tar
+
+          cp docker-compose.yml $(Build.ArtifactStagingDirectory)/docker/
+        displayName: "Export images as tar files"
+
+      - script: |
+          TRIVY_VERSION="0.69.3"
+          curl -sSfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+            | tar -xz -C /usr/local/bin trivy
+        displayName: "Install Trivy"
+
+      - script: |
+          echo "--- Scanning API image ---"
+          trivy image --severity HIGH,CRITICAL --exit-code 0 --format table contacts-app-api:${{ parameters.imageTag }}
+          trivy image --severity HIGH,CRITICAL --format json --output $(Build.ArtifactStagingDirectory)/docker/trivy-api-report.json contacts-app-api:${{ parameters.imageTag }}
+
+          echo "--- Scanning Frontend image ---"
+          trivy image --severity HIGH,CRITICAL --exit-code 0 --format table contacts-app-frontend:${{ parameters.imageTag }}
+          trivy image --severity HIGH,CRITICAL --format json --output $(Build.ArtifactStagingDirectory)/docker/trivy-frontend-report.json contacts-app-frontend:${{ parameters.imageTag }}
+        displayName: "Scan Docker images (Trivy)"
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: "$(Build.ArtifactStagingDirectory)/docker"
+          ArtifactName: "docker-images"
+          publishLocation: "Container"
+        displayName: "Publish Docker artifacts"
