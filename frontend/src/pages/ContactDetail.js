@@ -5,8 +5,12 @@ import { getInitials } from "../hooks/useContactHelpers";
 
 const ContactDetail = () => {
   const { id } = useParams();
-  const { data: contacts = [] } = useGetContactsQuery();
+  const { data: contacts = [], isLoading } = useGetContactsQuery();
   const contact = contacts.find((c) => String(c.id) === id);
+
+  if (isLoading) {
+    return <div className="loading-spinner">Loading contact...</div>;
+  }
 
   if (!contact) {
     return (

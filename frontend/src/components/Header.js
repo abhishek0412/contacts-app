@@ -8,6 +8,7 @@ const Header = () => {
   return (
     <div className="app-header">
       <Link to="/" className="header-title">
+        <img src="/logo.png" alt="Contact Manager" className="header-logo" />
         <h2>Contact Manager</h2>
       </Link>
       <nav className="header-nav">

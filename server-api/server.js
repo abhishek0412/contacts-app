@@ -1,5 +1,6 @@
 const express = require("express");
 const rateLimit = require("express-rate-limit");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
@@ -7,9 +8,13 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const DB_PATH = path.join(__dirname, "db.json");
 
-// CORS — allow frontend on port 3000
+// CORS — allow frontend on localhost
+const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "http://localhost:3000");
+  const origin = req.headers.origin;
+  if (origin && origin.match(/^http:\/\/localhost:\d+$/)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
   res.header("Access-Control-Allow-Headers", "Content-Type");
   res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
@@ -71,12 +76,17 @@ app.get("/contacts/:id", (req, res) => {
 app.post("/contacts", writeLimiter, (req, res) => {
   const { name, phone } = req.body;
 
-  if (!name || !phone) {
+  if (
+    !name ||
+    !phone ||
+    typeof name !== "string" ||
+    typeof phone !== "string"
+  ) {
     return res.status(400).json({ error: "Name and phone are required" });
   }
 
   const db = readDb();
-  const id = String(Date.now());
+  const id = crypto.randomUUID();
   const contact = { id, name, phone };
   db.contacts.push(contact);
   writeDb(db);
@@ -93,9 +103,13 @@ app.delete("/contacts/:id", writeLimiter, (req, res) => {
   res.json({});
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(
-    `Rate limits: 100 req/15min (global), 10 writes/min (POST/DELETE)`,
-  );
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(
+      `Rate limits: 100 req/15min (global), 10 writes/min (POST/DELETE)`,
+    );
+  });
+}
+
+module.exports = app;

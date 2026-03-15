@@ -14,7 +14,7 @@ const contactSchema = z.object({
 });
 
 const AddContacts = () => {
-  const [addContact] = useAddContactMutation();
+  const [addContact, { isLoading }] = useAddContactMutation();
   const navigate = useNavigate();
   const {
     register,
@@ -55,8 +55,8 @@ const AddContacts = () => {
             <span className="field-error">{errors.phone.message}</span>
           )}
         </div>
-        <button className="btn-add" type="submit">
-          Add Contact
+        <button className="btn-add" type="submit" disabled={isLoading}>
+          {isLoading ? "Adding..." : "Add Contact"}
         </button>
       </form>
     </div>

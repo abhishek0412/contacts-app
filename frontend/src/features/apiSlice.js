@@ -20,13 +20,22 @@ export const contactsApi = createApi({
       }),
       invalidatesTags: ["Contact"],
       async onQueryStarted(contact, { dispatch, queryFulfilled }) {
-        const { data } = await queryFulfilled;
-        dispatch(
-          showNotification({
-            message: `"${data.name}" has been added!`,
-            type: "success",
-          }),
-        );
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(
+            showNotification({
+              message: `"${data.name}" has been added!`,
+              type: "success",
+            }),
+          );
+        } catch {
+          dispatch(
+            showNotification({
+              message: "Failed to add contact.",
+              type: "error",
+            }),
+          );
+        }
       },
     }),
     deleteContact: builder.mutation({
@@ -38,13 +47,22 @@ export const contactsApi = createApi({
       async onQueryStarted(id, { dispatch, queryFulfilled, getState }) {
         const contacts = contactsApi.endpoints.getContacts.select()(getState());
         const contact = contacts.data?.find((c) => c.id === id);
-        await queryFulfilled;
-        dispatch(
-          showNotification({
-            message: `"${contact?.name}" has been removed.`,
-            type: "info",
-          }),
-        );
+        try {
+          await queryFulfilled;
+          dispatch(
+            showNotification({
+              message: `"${contact?.name}" has been removed.`,
+              type: "info",
+            }),
+          );
+        } catch {
+          dispatch(
+            showNotification({
+              message: "Failed to delete contact.",
+              type: "error",
+            }),
+          );
+        }
       },
     }),
   }),

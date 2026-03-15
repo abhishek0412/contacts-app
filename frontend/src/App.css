@@ -327,10 +327,22 @@ body {
 /* Navigation */
 .header-title {
   text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .header-title h2 {
   color: #fff;
+  margin: 0;
+  line-height: 1;
 }
 
 .header-nav {
