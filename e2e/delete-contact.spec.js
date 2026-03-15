@@ -6,12 +6,9 @@ test.describe("Delete Contact", () => {
 
   test.beforeEach(async ({ page }) => {
     // Create a temporary contact via API for delete tests
-    const response = await page.request.post(
-      "http://localhost:3001/contacts",
-      {
-        data: { name: "Delete Me", phone: "(555) 000-0000" },
-      },
-    );
+    const response = await page.request.post("http://localhost:3001/contacts", {
+      data: { name: "Delete Me", phone: "(555) 000-0000" },
+    });
     const contact = await response.json();
     testContactId = contact.id;
   });

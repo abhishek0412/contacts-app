@@ -4,8 +4,12 @@ class AddContactPage {
     this.nameInput = page.locator('input[placeholder="Name"]');
     this.phoneInput = page.locator('input[placeholder="Phone Number"]');
     this.submitButton = page.locator(".btn-add");
-    this.nameError = page.locator(".form-group:has(input[placeholder='Name']) .field-error");
-    this.phoneError = page.locator(".form-group:has(input[placeholder='Phone Number']) .field-error");
+    this.nameError = page.locator(
+      ".form-group:has(input[placeholder='Name']) .field-error",
+    );
+    this.phoneError = page.locator(
+      ".form-group:has(input[placeholder='Phone Number']) .field-error",
+    );
   }
 
   async goto() {
