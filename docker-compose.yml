@@ -1,0 +1,21 @@
+services:
+  api:
+    build: ./server-api
+    container_name: contacts-api
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./server-api/db.json:/app/db.json
+    environment:
+      - PORT=3001
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: contacts-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
