@@ -5,7 +5,7 @@
 | Component  | Technology                              | Port | Description                                              |
 | ---------- | --------------------------------------- | ---- | -------------------------------------------------------- |
 | Frontend   | React (CRA) + Redux Toolkit / RTK Query | 3000 | SPA serving the UI, client-side routing, form validation |
-| API Server | json-server v1 (beta)                   | 3001 | RESTful CRUD endpoints (`/contacts`)                     |
+| API Server | Express + express-rate-limit             | 3001 | RESTful CRUD endpoints (`/contacts`) with rate limiting  |
 | Data Store | db.json                                 | —    | Flat JSON file on disk                                   |
 | Transport  | HTTP (no TLS)                           | —    | Unencrypted communication between frontend and API       |
 
@@ -21,11 +21,12 @@
           │ POST /contacts        { name, phone }
           │ DELETE /contacts/:id
           ▼
- ┌──────────────────────────┐
- │  json-server (port 3001) │
- │  No auth · No rate limit │
- │  No input validation     │
- └────────┬─────────────────┘
+ ┌──────────────────────────────────────┐
+ │  Express Server (port 3001)          │
+ │  No auth · Rate limited              │
+ │  Server-side validation · CORS       │
+ │  Field whitelisting · 10KB body cap  │
+ └────────┬─────────────────────────────┘
           │ fs read/write
           ▼
  ┌──────────────────────────┐
@@ -63,7 +64,7 @@
 | ID  | Threat                     | Description                                                                                                                                                        | Affected Component | Risk         |
 | --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------ |
 | S-1 | **No authentication**      | The API has zero authentication. Any client on the network can call `GET /POST /DELETE /contacts` and impersonate a legitimate user.                               | API Server (TB-1)  | **Critical** |
-| S-2 | **No CSRF protection**     | No CSRF tokens are used. A malicious page opened in the same browser could issue state-changing requests (POST, DELETE) to `localhost:3001` on behalf of the user. | Frontend → API     | **High**     |
+| S-2 | **No CSRF protection**     | No CSRF tokens are used. However, CORS now restricts origins to `http://localhost:3000`. Cross-origin requests from other pages are blocked by the browser's preflight check. Residual risk: same-origin attacks, non-browser clients. | Frontend → API     | ~~High~~ → **Medium** |
 | S-3 | **No session or identity** | There is no concept of user identity. All operations are anonymous, so one user's actions are indistinguishable from another's.                                    | Entire system      | **High**     |
 
 #### Mitigations
@@ -71,7 +72,7 @@
 | Threat | Recommended Mitigation                                                                                 |
 | ------ | ------------------------------------------------------------------------------------------------------ |
 | S-1    | Add authentication (JWT, OAuth 2.0, or API keys) to all API endpoints.                                 |
-| S-2    | Implement CSRF tokens or use `SameSite` cookies. Use CORS with a strict `Access-Control-Allow-Origin`. |
+| S-2    | ✅ Partially mitigated — strict CORS (`Access-Control-Allow-Origin: http://localhost:3000`) implemented. Add CSRF tokens for full protection. |
 | S-3    | Introduce user accounts with session management; associate contacts with user IDs.                     |
 
 ---
@@ -81,21 +82,22 @@
 | ID  | Threat                                 | Description                                                                                                                                                                             | Affected Component | Risk         |
 | --- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------ |
 | T-1 | **Unrestricted DELETE**                | Any network client can delete any contact by ID (`DELETE /contacts/:id`) without authorization. Mass deletion is trivial.                                                               | API Server         | **Critical** |
-| T-2 | **Unrestricted POST (data injection)** | Any client can inject arbitrary contacts. json-server accepts any JSON body — fields beyond `name` and `phone` (e.g., `isAdmin`, `__proto__`) are persisted to db.json.                 | API Server         | **High**     |
-| T-3 | **No server-side validation**          | Validation exists only on the client (Zod schema). Attackers can bypass it entirely by calling the API directly with `curl`/Postman and submit empty, malformed, or oversized payloads. | API Server         | **High**     |
+| T-2 | ~~**Unrestricted POST (data injection)**~~ | ✅ **MITIGATED.** Server now whitelists only `name` and `phone` fields. Arbitrary fields like `isAdmin` or `__proto__` are ignored.                                                    | API Server         | ~~High~~ → **Resolved** |
+| T-3 | ~~**No server-side validation**~~          | ✅ **MITIGATED.** Express server validates that `name` and `phone` are present; returns 400 if missing. Body size capped at 10KB via `express.json({ limit: "10kb" })`.              | API Server         | ~~High~~ → **Resolved** |
 | T-4 | **db.json direct modification**        | The data file has no integrity protection (checksums, file permissions). Any process with fs access can alter it.                                                                       | File System (TB-2) | **Medium**   |
 | T-5 | **Man-in-the-middle (HTTP)**           | Traffic between browser and API is unencrypted. An attacker on the same network can intercept and modify requests/responses in transit.                                                 | Network (TB-1)     | **High**     |
-| T-6 | **Prototype pollution**                | json-server may be vulnerable to `__proto__` or `constructor` payloads in POST body that could pollute JavaScript object prototypes.                                                    | API Server         | **Medium**   |
+| T-6 | ~~**Prototype pollution**~~            | ✅ **MITIGATED.** Server destructures only `{ name, phone }` from request body. `__proto__`, `constructor`, and other keys are never persisted.                                         | API Server         | ~~Medium~~ → **Resolved** |
 
 #### Mitigations
 
 | Threat   | Recommended Mitigation                                                                                                |
 | -------- | --------------------------------------------------------------------------------------------------------------------- |
-| T-1, T-2 | Add authorization; validate that the requester owns the resource before allowing mutations.                           |
-| T-3      | Implement server-side input validation and schema enforcement (e.g., migrate to Express/Fastify with Zod middleware). |
+| T-1      | Add authorization; validate that the requester owns the resource before allowing mutations.                            |
+| T-2      | ✅ Resolved — field whitelisting implemented in Express server.                                                        |
+| T-3      | ✅ Resolved — server-side validation implemented; rejects empty `name`/`phone`. 10KB body limit enforced.             |
 | T-4      | Use a proper database (SQLite, PostgreSQL). Set restrictive file permissions on db.json.                              |
 | T-5      | Enforce HTTPS with TLS certificates (even in development, use `mkcert`).                                              |
-| T-6      | Sanitize incoming JSON keys; reject payloads containing `__proto__`, `constructor`, or `prototype`.                   |
+| T-6      | ✅ Resolved — only `name` and `phone` are destructured; all other keys are discarded.                                 |
 
 ---
 
@@ -145,10 +147,10 @@
 
 | ID  | Threat                                | Description                                                                                                                                                     | Affected Component | Risk         |
 | --- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------ |
-| D-1 | **No rate limiting**                  | The API has no rate limiting. An attacker can flood `POST /contacts` to bloat db.json or spam `DELETE` to wipe all data.                                        | API Server         | **Critical** |
-| D-2 | **db.json exhaustion**                | Repeated POST requests will grow db.json unboundedly until disk space is exhausted, crashing json-server.                                                       | File System        | **High**     |
-| D-3 | **Single-threaded server**            | json-server runs on a single Node.js thread. CPU-intensive or concurrent requests can block the event loop.                                                     | API Server         | **Medium**   |
-| D-4 | **No payload size limit**             | No `Content-Length` or body size restrictions. An attacker could send a multi-GB POST body.                                                                     | API Server         | **High**     |
+| D-1 | ~~**No rate limiting**~~              | ✅ **MITIGATED.** Global: 100 req/15min per IP. Write ops (POST/DELETE): 10 req/min per IP. Returns `429` with `Retry-After` header when exceeded.              | API Server         | ~~Critical~~ → **Resolved** |
+| D-2 | **db.json exhaustion**                | **REDUCED.** Rate limiting slows flooding (max 10 POSTs/min), but sustained attack can still grow db.json over time. No storage quota enforced.                  | File System        | ~~High~~ → **Medium** |
+| D-3 | **Single-threaded server**            | Express runs on a single Node.js thread. CPU-intensive or concurrent requests can block the event loop.                                                         | API Server         | **Medium**   |
+| D-4 | ~~**No payload size limit**~~         | ✅ **MITIGATED.** `express.json({ limit: "10kb" })` rejects bodies larger than 10KB with `413 Payload Too Large`.                                              | API Server         | ~~High~~ → **Resolved** |
 | D-5 | **Mass deletion**                     | Without auth, an attacker can script `DELETE /contacts/:id` for every known ID and wipe the entire contact list.                                                | API Server         | **Critical** |
 | D-6 | **Frontend crash via malformed data** | If db.json is corrupted (e.g., injected HTML/script in names), React could error during rendering. The ErrorBoundary catches this but the app becomes unusable. | Frontend           | **Medium**   |
 
@@ -156,10 +158,10 @@
 
 | Threat | Recommended Mitigation                                                                    |
 | ------ | ----------------------------------------------------------------------------------------- |
-| D-1    | Implement rate limiting middleware (e.g., `express-rate-limit`).                          |
-| D-2    | Set storage quotas; use a real database with size management.                             |
-| D-3    | Deploy behind a reverse proxy (Nginx) with connection limits; consider clustering.        |
-| D-4    | Enforce maximum request body size (e.g., `body-parser` limit of 10KB).                    |
+| D-1    | ✅ Resolved — `express-rate-limit` implemented (global 100/15min, writes 10/min).          |
+| D-2    | Partially mitigated by rate limiting. Still need storage quotas or a real database.        |
+| D-3    | Deploy behind a reverse proxy (Nginx) with connection limits; consider clustering.         |
+| D-4    | ✅ Resolved — `express.json({ limit: "10kb" })` enforced.                                |
 | D-5    | Require authentication for destructive operations. Implement soft-delete with recovery.   |
 | D-6    | Sanitize all data before rendering. Use server-side validation to reject malformed input. |
 
@@ -171,8 +173,8 @@
 | --- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------ |
 | E-1 | **No authorization model**                | There are no roles or permissions. Every user (or anonymous client) has full admin-level access: read all, create, delete any record.            | Entire system      | **Critical** |
 | E-2 | **Client-side routing bypass**            | Route protection is purely client-side. An attacker can call API endpoints directly, bypassing any UI-level restrictions.                        | Frontend → API     | **High**     |
-| E-3 | **json-server arbitrary field injection** | POST `/contacts` accepts any JSON fields. An attacker could inject `role: "admin"` or other fields that a future version of the app might trust. | API Server         | **Medium**   |
-| E-4 | **Dependency vulnerabilities**            | json-server beta, React scripts, and transitive dependencies may contain known CVEs that could enable remote code execution.                     | All                | **Medium**   |
+| E-3 | ~~**Arbitrary field injection**~~         | ✅ **MITIGATED.** Server destructures only `{ name, phone }` from POST body. Extra fields like `role: "admin"` are discarded.                    | API Server         | ~~Medium~~ → **Resolved** |
+| E-4 | **Dependency vulnerabilities**            | ~~json-server beta~~, React scripts, and transitive dependencies may contain known CVEs. json-server replaced with Express (stable).             | All                | **Low**      |
 
 #### Mitigations
 
@@ -180,34 +182,36 @@
 | ------ | --------------------------------------------------------------------------------------------------- |
 | E-1    | Implement RBAC (Role-Based Access Control) with at least user/admin roles.                          |
 | E-2    | Enforce authorization on the server. Never rely on client-side guards alone.                        |
-| E-3    | Whitelist allowed fields in POST/PUT body (e.g., only accept `name` and `phone`).                   |
-| E-4    | Run `npm audit` regularly. Pin dependency versions. Replace beta dependencies with stable releases. |
+| E-3    | ✅ Resolved — server destructures only `{ name, phone }` from request body.                          |
+| E-4    | ✅ Partially resolved — json-server beta replaced with Express (stable). Continue running `npm audit`. |
 
 ---
 
 ## 4. Risk Summary Matrix
 
-| STRIDE Category                | Critical | High   | Medium | Low   | Total  |
-| ------------------------------ | -------- | ------ | ------ | ----- | ------ |
-| **S** — Spoofing               | 1        | 2      | 0      | 0     | 3      |
-| **T** — Tampering              | 1        | 3      | 2      | 0     | 6      |
-| **R** — Repudiation            | 0        | 1      | 2      | 0     | 3      |
-| **I** — Information Disclosure | 1        | 1      | 2      | 2     | 6      |
-| **D** — Denial of Service      | 2        | 2      | 2      | 0     | 6      |
-| **E** — Elevation of Privilege | 1        | 1      | 2      | 0     | 4      |
-| **Total**                      | **6**    | **10** | **10** | **2** | **28** |
+| STRIDE Category                | Critical | High | Medium | Low | Resolved | Total (active) |
+| ------------------------------ | -------- | ---- | ------ | --- | -------- | -------------- |
+| **S** — Spoofing               | 1        | 1    | 1      | 0   | 0        | 3              |
+| **T** — Tampering              | 1        | 1    | 1      | 0   | 3        | 3              |
+| **R** — Repudiation            | 0        | 1    | 2      | 0   | 0        | 3              |
+| **I** — Information Disclosure | 1        | 1    | 2      | 2   | 0        | 6              |
+| **D** — Denial of Service      | 0        | 0    | 3      | 0   | 3        | 3              |
+| **E** — Elevation of Privilege | 1        | 1    | 0      | 1   | 1        | 3              |
+| **Total**                      | **4**    | **5**| **9**  | **3**| **7**   | **21**         |
+
+> **Post-mitigation summary:** 7 of 28 threats resolved. Critical threats reduced from 6 → 4. High threats reduced from 10 → 5.
 
 ---
 
 ## 5. Top 5 Priority Threats
 
-| Priority | ID        | Threat                                                  | Risk     | Effort to Mitigate                |
+| Priority | ID        | Threat                                                  | Risk     | Status                            |
 | -------- | --------- | ------------------------------------------------------- | -------- | --------------------------------- |
-| 1        | S-1 / E-1 | No authentication or authorization — entire API is open | Critical | High (requires backend rewrite)   |
-| 2        | T-1 / D-5 | Unrestricted mass deletion of contacts                  | Critical | Medium (add auth + soft delete)   |
-| 3        | I-1       | Full PII exposure without access control                | Critical | High (coupled with auth)          |
-| 4        | D-1 / D-2 | No rate limiting — API flooding / storage exhaustion    | Critical | Low (add middleware)              |
-| 5        | T-3       | No server-side input validation                         | High     | Medium (migrate to Express + Zod) |
+| 1        | S-1 / E-1 | No authentication or authorization — entire API is open | Critical | **Open** — requires auth layer    |
+| 2        | T-1 / D-5 | Unrestricted mass deletion of contacts                  | Critical | **Reduced** — rate limited to 10/min but still unauthenticated |
+| 3        | I-1       | Full PII exposure without access control                | Critical | **Open** — coupled with auth      |
+| 4        | D-1 / D-2 | ~~No rate limiting — API flooding / storage exhaustion~~ | ~~Critical~~ | ✅ **Resolved** — express-rate-limit implemented |
+| 5        | T-3       | ~~No server-side input validation~~                     | ~~High~~ | ✅ **Resolved** — Express + field whitelisting  |
 
 ---
 
@@ -221,18 +225,18 @@
 - [ ] Run `npm audit fix` on both frontend and server-api
 - [ ] Add `createdAt` / `updatedAt` timestamps to records
 
-### Phase 2 — API Hardening (Medium Effort)
+### Phase 2 — API Hardening (Medium Effort) — ✅ MOSTLY COMPLETE
 
-- [ ] Add rate limiting middleware (`express-rate-limit`)
-- [ ] Enforce request body size limits
-- [ ] Add CORS configuration with strict `Access-Control-Allow-Origin`
-- [ ] Implement server-side input validation (whitelist `name`, `phone` fields only)
+- [x] ~~Add rate limiting middleware (`express-rate-limit`)~~ — Global 100/15min, writes 10/min
+- [x] ~~Enforce request body size limits~~ — 10KB cap via `express.json()`
+- [x] ~~Add CORS configuration with strict `Access-Control-Allow-Origin`~~ — Restricted to `http://localhost:3000`
+- [x] ~~Implement server-side input validation (whitelist `name`, `phone` fields only)~~ — Destructured fields + 400 on missing
 - [ ] Add structured request logging (method, path, IP, timestamp)
-- [ ] Sanitize JSON keys to prevent prototype pollution
+- [x] ~~Sanitize JSON keys to prevent prototype pollution~~ — Only `name`, `phone` extracted from body
 
 ### Phase 3 — Authentication & Authorization (High Effort)
 
-- [ ] Migrate from json-server to Express/Fastify with a real database
+- [x] ~~Migrate from json-server to Express/Fastify with a real database~~ — Migrated to Express (db.json retained)
 - [ ] Implement user authentication (JWT or session-based)
 - [ ] Add RBAC with user-scoped data access
 - [ ] Enforce HTTPS with TLS
@@ -241,4 +245,4 @@
 
 ---
 
-_Generated: March 2026 · Methodology: STRIDE (Microsoft Threat Modeling)_
+_Generated: March 2026 · Updated: March 2026 (post Express migration) · Methodology: STRIDE (Microsoft Threat Modeling)_
