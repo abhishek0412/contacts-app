@@ -1,6 +1,6 @@
 # ╔══════════════════════════════════════════════════════════╗
 # ║  CD Pipeline — Contacts App                             ║
-# ║  Deploys to Azure Container Apps (multi-region)         ║
+# ║  Deploys to Azure Container Apps (Dev only)             ║
 # ║  Consumes Docker tar artifacts from CI pipeline         ║
 # ╚══════════════════════════════════════════════════════════╝
 
@@ -20,21 +20,6 @@ parameters:
     type: string
     default: "1.0.0"
 
-  - name: deployDev
-    displayName: "Deploy to Dev"
-    type: boolean
-    default: true
-
-  - name: deployStaging
-    displayName: "Deploy to Staging"
-    type: boolean
-    default: true
-
-  - name: deployProd
-    displayName: "Deploy to Production"
-    type: boolean
-    default: false
-
 pool:
   vmImage: "ubuntu-latest"
 
@@ -44,14 +29,52 @@ variables:
   imageVersion: "${{ parameters.imageVersion }}"
   imageTag: "$(imageVersion)-$(resources.pipeline.ci.runID)"
   resourceGroupDev: "rg-contacts-dev"
-  resourceGroupStaging: "rg-contacts-staging"
-  resourceGroupProdEast: "rg-contacts-prod-eastus"
-  resourceGroupProdWest: "rg-contacts-prod-westeurope"
 
 stages:
-  # ── Stage 1: Push images to ACR ────────────────────────
+  # ── Stage 1: Bootstrap Infrastructure ───────────────────
+  # Creates resource group and ACR if they don't exist
+  - stage: Bootstrap_Infra
+    displayName: "Bootstrap Infrastructure"
+    jobs:
+      - job: CreateResources
+        displayName: "Create RG & ACR"
+        steps:
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: "bash"
+              scriptLocation: "inlineScript"
+              inlineScript: |
+                set -e
+
+                RG="$(resourceGroupDev)"
+                REGION="eastus2"
+                ACR="$(acrName)"
+
+                echo "=== Ensuring Resource Group: $RG ==="
+                az group create --name "$RG" --location "$REGION" --output none
+                echo "Resource group ready."
+
+                echo "=== Ensuring ACR: $ACR ==="
+                if az acr show --name "$ACR" --resource-group "$RG" &>/dev/null; then
+                  echo "ACR already exists."
+                else
+                  az acr create \
+                    --name "$ACR" \
+                    --resource-group "$RG" \
+                    --location "$REGION" \
+                    --sku Standard \
+                    --admin-enabled false \
+                    --output none
+                  echo "ACR created."
+                fi
+            displayName: "Create Resource Group & ACR"
+
+  # ── Stage 2: Push images to ACR ────────────────────────
   - stage: Push_to_ACR
     displayName: "Push to ACR"
+    dependsOn:
+      - Bootstrap_Infra
     jobs:
       - template: templates/push-to-acr.yml
         parameters:
@@ -60,138 +83,18 @@ stages:
           imageTag: $(imageTag)
           imageVersion: $(imageVersion)
 
-  # ── Stage 2: Deploy to Dev (auto — no approval) ───────
+  # ── Stage 2: Deploy to Dev ─────────────────────────────
   - stage: Deploy_Dev
     displayName: "Deploy to Dev"
     dependsOn:
       - Push_to_ACR
-    condition: and(succeeded(), eq('${{ parameters.deployDev }}', 'true'))
     jobs:
       - template: templates/deploy-region.yml
         parameters:
           environment: "Dev"
           azureSubscription: $(azureSubscription)
           resourceGroup: $(resourceGroupDev)
-          region: "eastus"
+          region: "eastus2"
           acrName: $(acrName)
           imageTag: $(imageTag)
           envSuffix: "dev"
-
-  # ── Stage 3: Deploy to Staging (approval required) ─────
-  - stage: Deploy_Staging
-    displayName: "Deploy to Staging"
-    dependsOn:
-      - Deploy_Dev
-    condition: and(succeeded(), eq('${{ parameters.deployStaging }}', 'true'))
-    jobs:
-      - template: templates/deploy-region.yml
-        parameters:
-          environment: "Staging"
-          azureSubscription: $(azureSubscription)
-          resourceGroup: $(resourceGroupStaging)
-          region: "eastus"
-          acrName: $(acrName)
-          imageTag: $(imageTag)
-          envSuffix: "staging"
-
-  # ── Stage 4: Deploy to Prod — East US (canary 20%) ────
-  - stage: Deploy_Prod_EastUS
-    displayName: "Deploy to Prod (East US)"
-    dependsOn:
-      - Deploy_Staging
-    condition: and(succeeded(), eq('${{ parameters.deployProd }}', 'true'))
-    jobs:
-      - template: templates/deploy-region.yml
-        parameters:
-          environment: "Prod-EastUS"
-          azureSubscription: $(azureSubscription)
-          resourceGroup: $(resourceGroupProdEast)
-          region: "eastus"
-          acrName: $(acrName)
-          imageTag: $(imageTag)
-          envSuffix: "prod-eastus"
-          canaryPercentage: 20
-
-  # ── Stage 5: Promote East US to 100% ──────────────────
-  - stage: Promote_Prod_EastUS
-    displayName: "Promote East US (100%)"
-    dependsOn:
-      - Deploy_Prod_EastUS
-    condition: succeeded()
-    jobs:
-      - deployment: Promote
-        displayName: "Promote East US to full traffic"
-        environment: "Prod-EastUS"
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: AzureCLI@2
-                  inputs:
-                    azureSubscription: $(azureSubscription)
-                    scriptType: "bash"
-                    scriptLocation: "inlineScript"
-                    inlineScript: |
-                      echo "=== Promoting East US frontend to 100% ==="
-                      az containerapp ingress traffic set \
-                        --name "contacts-frontend-prod-eastus" \
-                        --resource-group "$(resourceGroupProdEast)" \
-                        --revision-weight latest=100
-
-                      echo "=== Promoting East US API to 100% ==="
-                      az containerapp ingress traffic set \
-                        --name "contacts-api-prod-eastus" \
-                        --resource-group "$(resourceGroupProdEast)" \
-                        --revision-weight latest=100
-                  displayName: "Set 100% traffic to latest revision"
-
-  # ── Stage 6: Deploy to Prod — West Europe (canary 20%) ─
-  - stage: Deploy_Prod_WestEurope
-    displayName: "Deploy to Prod (West Europe)"
-    dependsOn:
-      - Promote_Prod_EastUS
-    condition: succeeded()
-    jobs:
-      - template: templates/deploy-region.yml
-        parameters:
-          environment: "Prod-WestEurope"
-          azureSubscription: $(azureSubscription)
-          resourceGroup: $(resourceGroupProdWest)
-          region: "westeurope"
-          acrName: $(acrName)
-          imageTag: $(imageTag)
-          envSuffix: "prod-westeurope"
-          canaryPercentage: 20
-
-  # ── Stage 7: Promote West Europe to 100% ──────────────
-  - stage: Promote_Prod_WestEurope
-    displayName: "Promote West Europe (100%)"
-    dependsOn:
-      - Deploy_Prod_WestEurope
-    condition: succeeded()
-    jobs:
-      - deployment: Promote
-        displayName: "Promote West Europe to full traffic"
-        environment: "Prod-WestEurope"
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: AzureCLI@2
-                  inputs:
-                    azureSubscription: $(azureSubscription)
-                    scriptType: "bash"
-                    scriptLocation: "inlineScript"
-                    inlineScript: |
-                      echo "=== Promoting West Europe frontend to 100% ==="
-                      az containerapp ingress traffic set \
-                        --name "contacts-frontend-prod-westeurope" \
-                        --resource-group "$(resourceGroupProdWest)" \
-                        --revision-weight latest=100
-
-                      echo "=== Promoting West Europe API to 100% ==="
-                      az containerapp ingress traffic set \
-                        --name "contacts-api-prod-westeurope" \
-                        --resource-group "$(resourceGroupProdWest)" \
-                        --revision-weight latest=100
-                  displayName: "Set 100% traffic to latest revision"

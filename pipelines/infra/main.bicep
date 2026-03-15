@@ -27,9 +27,17 @@ module env 'modules/container-app-env.bicep' = {
   }
 }
 
-// ── Existing ACR reference (created separately or first deploy) ─
-resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+// ── ACR (created if not exists, idempotent) ─────────────────
+resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: acrName
+  location: location
+  sku: {
+    name: 'Standard'
+  }
+  properties: {
+    adminUserEnabled: false
+    publicNetworkAccess: 'Enabled'
+  }
 }
 
 // ── API Container App (internal ingress) ────────────────
