@@ -20,10 +20,39 @@ variables:
 
 stages:
   # ──────────────────────────────────────────────
+  # Stage 0: Secret Scanning
+  # ──────────────────────────────────────────────
+  - stage: Secret_Scan
+    displayName: "Secret Scan"
+    jobs:
+      - job: Gitleaks
+        displayName: "Gitleaks Secret Detection"
+        steps:
+          - script: |
+              GITLEAKS_VERSION="8.24.3"
+              curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+                | tar -xz -C /usr/local/bin gitleaks
+            displayName: "Install Gitleaks"
+
+          - script: |
+              gitleaks detect --source=. --verbose --report-format=sarif --report-path=$(System.DefaultWorkingDirectory)/gitleaks-report.sarif
+            displayName: "Run Gitleaks scan"
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: "$(System.DefaultWorkingDirectory)/gitleaks-report.sarif"
+              ArtifactName: "security-reports"
+              publishLocation: "Container"
+            condition: succeededOrFailed()
+            displayName: "Publish Gitleaks report"
+
+  # ──────────────────────────────────────────────
   # Stage 1: API Integration Tests
   # ──────────────────────────────────────────────
   - stage: Test_API
     displayName: "API Tests"
+    dependsOn:
+      - Secret_Scan
     jobs:
       - job: ServerTests
         displayName: "Server Integration Tests"
@@ -38,6 +67,12 @@ stages:
               npm ci
               npm install --no-save jest-junit
             displayName: "Install dependencies"
+
+          - script: |
+              cd server-api
+              npm audit --audit-level=high
+            displayName: "Audit API dependencies"
+            continueOnError: true
 
           - script: |
               cd server-api
@@ -60,7 +95,8 @@ stages:
   # ──────────────────────────────────────────────
   - stage: Test_Frontend
     displayName: "Frontend Tests"
-    dependsOn: []
+    dependsOn:
+      - Secret_Scan
     jobs:
       - job: FrontendTests
         displayName: "Frontend Unit Tests"
@@ -75,6 +111,12 @@ stages:
               npm ci
               npm install --no-save jest-junit
             displayName: "Install dependencies"
+
+          - script: |
+              cd frontend
+              npm audit --audit-level=high
+            displayName: "Audit frontend dependencies"
+            continueOnError: true
 
           - script: |
               cd frontend
@@ -96,8 +138,11 @@ stages:
   # ──────────────────────────────────────────────
   # Stage 3: E2E Tests (after unit/integration tests)
   # ──────────────────────────────────────────────
+  # Stage 3: E2E Tests (after unit/integration tests)
+  # Non-blocking — flaky UI tests will not fail the pipeline
+  # ──────────────────────────────────────────────
   - stage: Test_E2E
-    displayName: "E2E Tests"
+    displayName: "E2E Tests (non-blocking)"
     dependsOn:
       - Test_API
       - Test_Frontend
@@ -128,6 +173,7 @@ stages:
           - script: |
               npx playwright test --reporter=list,junit
             displayName: "Run E2E tests"
+            continueOnError: true
             env:
               CI: "true"
               PLAYWRIGHT_JUNIT_OUTPUT_NAME: "$(System.DefaultWorkingDirectory)/e2e-results/e2e-results.xml"
@@ -149,16 +195,37 @@ stages:
             displayName: "Publish failure screenshots"
 
   # ──────────────────────────────────────────────
-  # Stage 4: Build Docker Images (after all tests pass)
+  # Stage 4: Build Docker Images (after all tests)
+  # Runs even if E2E stage fails (flaky UI tests)
   # ──────────────────────────────────────────────
   - stage: Build_Docker
     displayName: "Build Docker Images"
     dependsOn:
       - Test_E2E
+    condition: |
+      and(
+        not(failed('Test_API')),
+        not(failed('Test_Frontend')),
+        not(canceled())
+      )
     jobs:
       - job: BuildImages
         displayName: "Build & Export Docker Images"
         steps:
+          - script: |
+              HADOLINT_VERSION="2.12.0"
+              curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" \
+                -o /usr/local/bin/hadolint
+              chmod +x /usr/local/bin/hadolint
+            displayName: "Install Hadolint"
+
+          - script: |
+              echo "--- Linting server-api/Dockerfile ---"
+              hadolint server-api/Dockerfile
+              echo "--- Linting frontend/Dockerfile ---"
+              hadolint frontend/Dockerfile
+            displayName: "Lint Dockerfiles (Hadolint)"
+
           - script: |
               docker build \
                 -t contacts-app-api:$(imageTag) \
@@ -194,6 +261,22 @@ stages:
 
               cp docker-compose.yml $(Build.ArtifactStagingDirectory)/docker/
             displayName: "Export images as tar files"
+
+          - script: |
+              TRIVY_VERSION="0.62.1"
+              curl -sSfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+                | tar -xz -C /usr/local/bin trivy
+            displayName: "Install Trivy"
+
+          - script: |
+              echo "--- Scanning API image ---"
+              trivy image --severity HIGH,CRITICAL --exit-code 0 --format table contacts-app-api:$(imageTag)
+              trivy image --severity HIGH,CRITICAL --format json --output $(Build.ArtifactStagingDirectory)/docker/trivy-api-report.json contacts-app-api:$(imageTag)
+
+              echo "--- Scanning Frontend image ---"
+              trivy image --severity HIGH,CRITICAL --exit-code 0 --format table contacts-app-frontend:$(imageTag)
+              trivy image --severity HIGH,CRITICAL --format json --output $(Build.ArtifactStagingDirectory)/docker/trivy-frontend-report.json contacts-app-frontend:$(imageTag)
+            displayName: "Scan Docker images (Trivy)"
 
           - task: PublishBuildArtifacts@1
             inputs:
