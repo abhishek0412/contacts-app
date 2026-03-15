@@ -1,0 +1,132 @@
+# CI Pipeline — Contacts App
+# Manual trigger only (no auto-trigger on push or PR)
+
+trigger: none
+pr: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  nodeVersion: '22.x'
+  buildTag: '$(Build.BuildId)'
+
+stages:
+  # ──────────────────────────────────────────────
+  # Stage 1: API Integration Tests
+  # ──────────────────────────────────────────────
+  - stage: Test_API
+    displayName: 'API Tests'
+    jobs:
+      - job: ServerTests
+        displayName: 'Server Integration Tests'
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '$(nodeVersion)'
+            displayName: 'Install Node.js'
+
+          - script: |
+              cd server-api
+              npm ci
+              npm install --no-save jest-junit
+            displayName: 'Install dependencies'
+
+          - script: |
+              cd server-api
+              npx jest --verbose --ci --reporters=default --reporters=jest-junit
+            displayName: 'Run API tests'
+            env:
+              JEST_JUNIT_OUTPUT_DIR: '$(System.DefaultWorkingDirectory)/server-api/test-results'
+              JEST_JUNIT_OUTPUT_NAME: 'api-results.xml'
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'server-api/test-results/*.xml'
+              testRunTitle: 'API Integration Tests'
+            condition: succeededOrFailed()
+            displayName: 'Publish API test results'
+
+  # ──────────────────────────────────────────────
+  # Stage 2: Frontend Unit Tests (parallel with API)
+  # ──────────────────────────────────────────────
+  - stage: Test_Frontend
+    displayName: 'Frontend Tests'
+    dependsOn: []
+    jobs:
+      - job: FrontendTests
+        displayName: 'Frontend Unit Tests'
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '$(nodeVersion)'
+            displayName: 'Install Node.js'
+
+          - script: |
+              cd frontend
+              npm ci
+              npm install --no-save jest-junit
+            displayName: 'Install dependencies'
+
+          - script: |
+              cd frontend
+              npx react-scripts test --ci --watchAll=false --reporters=default --reporters=jest-junit
+            displayName: 'Run frontend tests'
+            env:
+              JEST_JUNIT_OUTPUT_DIR: '$(System.DefaultWorkingDirectory)/frontend/test-results'
+              JEST_JUNIT_OUTPUT_NAME: 'frontend-results.xml'
+              CI: 'true'
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'frontend/test-results/*.xml'
+              testRunTitle: 'Frontend Unit Tests'
+            condition: succeededOrFailed()
+            displayName: 'Publish frontend test results'
+
+  # ──────────────────────────────────────────────
+  # Stage 3: Build Docker Images (after tests pass)
+  # ──────────────────────────────────────────────
+  - stage: Build_Docker
+    displayName: 'Build Docker Images'
+    dependsOn:
+      - Test_API
+      - Test_Frontend
+    jobs:
+      - job: BuildImages
+        displayName: 'Build & Export Docker Images'
+        steps:
+          - script: |
+              docker build \
+                -t contacts-app-api:$(buildTag) \
+                -f server-api/Dockerfile \
+                server-api/
+            displayName: 'Build API image'
+
+          - script: |
+              docker build \
+                -t contacts-app-frontend:$(buildTag) \
+                -f frontend/Dockerfile \
+                frontend/
+            displayName: 'Build Frontend image'
+
+          - script: |
+              mkdir -p $(Build.ArtifactStagingDirectory)/docker
+
+              docker save contacts-app-api:$(buildTag) \
+                -o $(Build.ArtifactStagingDirectory)/docker/contacts-app-api.tar
+
+              docker save contacts-app-frontend:$(buildTag) \
+                -o $(Build.ArtifactStagingDirectory)/docker/contacts-app-frontend.tar
+
+              cp docker-compose.yml $(Build.ArtifactStagingDirectory)/docker/
+            displayName: 'Export images as tar files'
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/docker'
+              ArtifactName: 'docker-images'
+              publishLocation: 'Container'
+            displayName: 'Publish Docker artifacts'
