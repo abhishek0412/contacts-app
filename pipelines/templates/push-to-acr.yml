@@ -9,20 +9,22 @@ parameters:
     type: string
   - name: imageVersion
     type: string
+  - name: ciRunId
+    type: string
 
 jobs:
   - job: PushToACR
     displayName: "Push Images to ACR"
     steps:
-      - task: DownloadBuildArtifacts@1
+      - task: DownloadPipelineArtifact@2
         inputs:
-          buildType: "specific"
+          source: "specific"
           project: "$(System.TeamProjectId)"
           pipeline: "$(resources.pipeline.ci.pipelineID)"
-          buildVersionToDownload: "specific"
-          runId: "$(resources.pipeline.ci.runID)"
-          artifactName: "docker-images"
-          downloadPath: "$(Pipeline.Workspace)"
+          runVersion: "specific"
+          runId: "${{ parameters.ciRunId }}"
+          artifact: "docker-images"
+          path: "$(Pipeline.Workspace)/docker-images"
         displayName: "Download CI artifacts"
 
       - script: |

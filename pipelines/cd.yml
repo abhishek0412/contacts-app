@@ -20,6 +20,10 @@ parameters:
     type: string
     default: "1.0.0"
 
+  - name: ciRunId
+    displayName: "CI Pipeline Run ID (from CI build)"
+    type: string
+
   - name: deployDev
     displayName: "Deploy to Dev"
     type: boolean
@@ -42,7 +46,8 @@ variables:
   azureSubscription: "Visual Studio Enterprise Subscription (325abee5-c245-44b6-878e-47781a6fa8aa)" # Azure DevOps service connection name
   acrName: "contactsappacr" # Azure Container Registry name
   imageVersion: "${{ parameters.imageVersion }}"
-  imageTag: "$(imageVersion)-$(resources.pipeline.ci.runID)"
+  ciRunId: "${{ parameters.ciRunId }}"
+  imageTag: "$(imageVersion)-$(ciRunId)"
   resourceGroupDev: "rg-contacts-dev"
   resourceGroupStaging: "rg-contacts-staging"
   resourceGroupProdEast: "rg-contacts-prod-eastus"
@@ -59,6 +64,7 @@ stages:
           azureSubscription: $(azureSubscription)
           imageTag: $(imageTag)
           imageVersion: $(imageVersion)
+          ciRunId: $(ciRunId)
 
   # ── Stage 2: Deploy to Dev (auto — no approval) ───────
   - stage: Deploy_Dev
