@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { removeContact } from "../features/contactsSlice";
 import { getInitials } from "../hooks/useContactHelpers";
-import ConfirmDialog from "./ConfirmDialog";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
 
 const CONTACTS_PER_PAGE = 5;
 

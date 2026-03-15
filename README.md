@@ -41,20 +41,23 @@ frontend/
 │   ├── app/
 │   │   └── store.js             # Redux store configuration
 │   ├── components/
-│   │   ├── App.js               # Root component with routes
-│   │   ├── App.css              # Global styles
+│   │   ├── ui/
+│   │   │   ├── ConfirmDialog.js # Delete confirmation modal
+│   │   │   ├── Notification.js  # Toast notification component
+│   │   │   └── ErrorBoundary.js # Error boundary wrapper
 │   │   ├── Header.js            # Navigation header with badge
-│   │   ├── ContactList.js       # Paginated contact list with search
-│   │   ├── ContactDetail.js     # Contact detail page
-│   │   ├── AddContacts.js       # Add contact form with Zod validation
-│   │   ├── Notification.js      # Toast notification component
-│   │   ├── ConfirmDialog.js     # Delete confirmation modal
-│   │   └── ErrorBoundary.js     # Error boundary wrapper
+│   │   └── ContactCard.js       # Contact display card
 │   ├── features/
 │   │   ├── contactsSlice.js     # Contacts state, thunks, reducers
 │   │   └── notificationSlice.js # Notification state management
 │   ├── hooks/
 │   │   └── useContactHelpers.js # Shared utility functions
+│   ├── pages/
+│   │   ├── ContactList.js       # Paginated contact list with search
+│   │   ├── ContactDetail.js     # Contact detail page
+│   │   └── AddContacts.js       # Add contact form with Zod validation
+│   ├── App.js                   # Root component with routes
+│   ├── App.css                  # Global styles
 │   └── index.js                 # Entry point (Provider + BrowserRouter)
 server-api/
 ├── db.json                      # Mock database (100 contacts)

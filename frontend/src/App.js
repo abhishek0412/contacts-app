@@ -2,14 +2,14 @@ import "./App.css";
 import React, { useEffect, lazy, Suspense } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Routes, Route } from "react-router-dom";
-import Header from "./Header.js";
-import Notification from "./Notification.js";
-import ErrorBoundary from "./ErrorBoundary.js";
-import { fetchContacts } from "../features/contactsSlice";
+import Header from "./components/Header.js";
+import Notification from "./components/ui/Notification.js";
+import ErrorBoundary from "./components/ui/ErrorBoundary.js";
+import { fetchContacts } from "./features/contactsSlice";
 
-const ContactList = lazy(() => import("./ContactList.js"));
-const AddContacts = lazy(() => import("./AddContacts.js"));
-const ContactDetail = lazy(() => import("./ContactDetail.js"));
+const ContactList = lazy(() => import("./pages/ContactList.js"));
+const AddContacts = lazy(() => import("./pages/AddContacts.js"));
+const ContactDetail = lazy(() => import("./pages/ContactDetail.js"));
 
 function App() {
   const dispatch = useDispatch();

@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { clearNotification } from "../features/notificationSlice";
+import { clearNotification } from "../../features/notificationSlice";
 
 const Notification = () => {
   const { message, type } = useSelector((state) => state.notification);
