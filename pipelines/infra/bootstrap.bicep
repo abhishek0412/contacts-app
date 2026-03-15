@@ -1,6 +1,6 @@
 // ╔══════════════════════════════════════════════════════════╗
-// ║  Main Bicep — Contacts App (Subscription-level)         ║
-// ║  Creates Resource Group + all resources via module       ║
+// ║  Bootstrap Bicep — Resource Group + ACR only            ║
+// ║  Runs BEFORE image push so ACR exists for docker push   ║
 // ║  Deploy with: az deployment sub create                   ║
 // ╚══════════════════════════════════════════════════════════╝
 
@@ -15,12 +15,6 @@ param environmentSuffix string
 @description('ACR name (globally unique)')
 param acrName string
 
-@description('API image tag')
-param apiImageTag string
-
-@description('Frontend image tag')
-param frontendImageTag string
-
 // ── Resource Group ──────────────────────────────────────
 var resourceGroupName = 'rg-contacts-${environmentSuffix}'
 
@@ -29,28 +23,16 @@ resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   location: location
 }
 
-// ── All resources inside the RG ─────────────────────────
-module resources 'modules/resources.bicep' = {
-  name: 'deploy-resources-${environmentSuffix}'
+// ── ACR ─────────────────────────────────────────────────
+module acr 'modules/acr.bicep' = {
+  name: 'deploy-acr-${environmentSuffix}'
   scope: rg
   params: {
     location: location
-    environmentSuffix: environmentSuffix
     acrName: acrName
-    apiImageTag: apiImageTag
-    frontendImageTag: frontendImageTag
   }
 }
 
 // ── Outputs ─────────────────────────────────────────────
-@description('Resource Group name')
 output resourceGroupName string = rg.name
-
-@description('Frontend FQDN')
-output frontendFqdn string = resources.outputs.frontendFqdn
-
-@description('API internal FQDN')
-output apiFqdn string = resources.outputs.apiFqdn
-
-@description('ACR login server')
-output acrLoginServer string = resources.outputs.acrLoginServer
+output acrLoginServer string = acr.outputs.loginServer

@@ -1,11 +1,10 @@
 # Template: Deploy to a specific region using Azure Container Apps
+# Uses subscription-level Bicep — creates RG + all resources via IaC
 
 parameters:
   - name: environment
     type: string
   - name: azureSubscription
-    type: string
-  - name: resourceGroup
     type: string
   - name: region
     type: string
@@ -27,50 +26,33 @@ jobs:
       runOnce:
         deploy:
           steps:
-            - task: AzureCLI@2
+            - checkout: self
+
+            - task: AzureResourceManagerTemplateDeployment@3
+              name: deployBicep
               inputs:
-                azureSubscription: "${{ parameters.azureSubscription }}"
-                scriptType: "bash"
-                scriptLocation: "inlineScript"
-                inlineScript: |
-                  set -e
+                connectedServiceName: "${{ parameters.azureSubscription }}"
+                deploymentScope: "Subscription"
+                location: "${{ parameters.region }}"
+                templateLocation: "Linked artifact"
+                csmFile: "pipelines/infra/main.bicep"
+                overrideParameters: >-
+                  -location ${{ parameters.region }}
+                  -environmentSuffix ${{ parameters.envSuffix }}
+                  -acrName ${{ parameters.acrName }}
+                  -apiImageTag ${{ parameters.imageTag }}
+                  -frontendImageTag ${{ parameters.imageTag }}
+                deploymentMode: "Incremental"
+                deploymentName: "deploy-${{ parameters.envSuffix }}-$(Build.BuildId)"
+                deploymentOutputs: "armOutputs"
+              displayName: "Deploy via Bicep (subscription-level)"
 
-                  RG="${{ parameters.resourceGroup }}"
-                  REGION="${{ parameters.region }}"
-                  ACR="${{ parameters.acrName }}"
-                  TAG="${{ parameters.imageTag }}"
-                  SUFFIX="${{ parameters.envSuffix }}"
-                  ENV_NAME="contacts-env-${SUFFIX}"
-                  API_APP="contacts-api-${SUFFIX}"
-                  FRONTEND_APP="contacts-frontend-${SUFFIX}"
-
-                  echo "=== Deploying infrastructure (Bicep) ==="
-                  az deployment group create \
-                    --resource-group "$RG" \
-                    --template-file pipelines/infra/main.bicep \
-                    --parameters \
-                      location="$REGION" \
-                      environmentSuffix="$SUFFIX" \
-                      acrName="$ACR" \
-                      apiImageTag="$TAG" \
-                      frontendImageTag="$TAG"
-
-                  echo "=== Getting API internal FQDN ==="
-                  API_FQDN=$(az containerapp show \
-                    --name "$API_APP" \
-                    --resource-group "$RG" \
-                    --query "properties.configuration.ingress.fqdn" \
-                    --output tsv)
-
-                  echo "API internal FQDN: $API_FQDN"
-
-                  echo "=== Updating frontend with API URL ==="
-                  az containerapp update \
-                    --name "$FRONTEND_APP" \
-                    --resource-group "$RG" \
-                    --set-env-vars "API_PROXY_PASS=https://${API_FQDN}/"
-
-              displayName: "Deploy via Bicep & configure apps"
+            - pwsh: |
+                $outputs = '$(armOutputs)' | ConvertFrom-Json
+                $fqdn = $outputs.frontendFqdn.value
+                Write-Host "Frontend FQDN: $fqdn"
+                Write-Host "##vso[task.setvariable variable=frontendFqdn]$fqdn"
+              displayName: "Parse Bicep deployment outputs"
 
             # Canary: set traffic split if not 100%
             - ${{ if ne(parameters.canaryPercentage, 100) }}:
@@ -81,7 +63,7 @@ jobs:
                     scriptLocation: "inlineScript"
                     inlineScript: |
                       SUFFIX="${{ parameters.envSuffix }}"
-                      RG="${{ parameters.resourceGroup }}"
+                      RG="rg-contacts-${SUFFIX}"
 
                       echo "=== Setting canary traffic: ${{ parameters.canaryPercentage }}% to latest ==="
                       az containerapp ingress traffic set \
@@ -96,16 +78,9 @@ jobs:
                 scriptType: "bash"
                 scriptLocation: "inlineScript"
                 inlineScript: |
-                  SUFFIX="${{ parameters.envSuffix }}"
-                  RG="${{ parameters.resourceGroup }}"
+                  FRONTEND_URL="$(frontendFqdn)"
 
                   echo "=== Smoke test — Frontend ==="
-                  FRONTEND_URL=$(az containerapp show \
-                    --name "contacts-frontend-${SUFFIX}" \
-                    --resource-group "$RG" \
-                    --query "properties.configuration.ingress.fqdn" \
-                    --output tsv)
-
                   HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${FRONTEND_URL}/")
                   echo "Frontend responded with: $HTTP_STATUS"
                   if [ "$HTTP_STATUS" -ne 200 ]; then

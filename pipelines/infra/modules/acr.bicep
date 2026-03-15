@@ -1,44 +1,28 @@
-// Azure Container Registry — Premium SKU for geo-replication
+// ACR module — used by bootstrap.bicep
+// Also defined inline in resources.bicep (idempotent — same config)
+
+@description('Azure region')
+param location string
 
 @description('ACR name (globally unique)')
 param acrName string
-
-@description('Primary location')
-param location string
-
-@description('Geo-replication locations (excluding primary)')
-param replicationLocations array = []
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: acrName
   location: location
   sku: {
-    name: 'Premium'
+    name: 'Standard'
   }
   properties: {
     adminUserEnabled: false
     publicNetworkAccess: 'Enabled'
+    dataEndpointEnabled: false
     policies: {
-      retentionPolicy: {
-        status: 'enabled'
-        days: 30
+      exportPolicy: {
+        status: 'disabled'
       }
     }
   }
 }
 
-// Geo-replicate to additional regions
-resource replications 'Microsoft.ContainerRegistry/registries/replications@2023-07-01' = [
-  for repl in replicationLocations: {
-    parent: acr
-    name: repl
-    location: repl
-    properties: {}
-  }
-]
-
-@description('ACR login server')
 output loginServer string = acr.properties.loginServer
-
-@description('ACR resource ID')
-output acrId string = acr.id

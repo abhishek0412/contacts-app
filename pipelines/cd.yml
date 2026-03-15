@@ -28,47 +28,27 @@ variables:
   acrName: "contactsappacr" # Azure Container Registry name
   imageVersion: "${{ parameters.imageVersion }}"
   imageTag: "$(imageVersion)-$(resources.pipeline.ci.runID)"
-  resourceGroupDev: "rg-contacts-dev"
 
 stages:
-  # ── Stage 1: Bootstrap Infrastructure ───────────────────
-  # Creates resource group and ACR if they don't exist
+  # ── Stage 1: Bootstrap Infrastructure (Bicep) ──────────
+  # Creates Resource Group + ACR so images can be pushed
   - stage: Bootstrap_Infra
-    displayName: "Bootstrap Infrastructure"
+    displayName: "Bootstrap Infrastructure (Bicep)"
     jobs:
-      - job: CreateResources
-        displayName: "Create RG & ACR"
+      - job: BootstrapBicep
+        displayName: "Create RG & ACR via Bicep"
         steps:
-          - task: AzureCLI@2
+          - task: AzureResourceManagerTemplateDeployment@3
             inputs:
-              azureSubscription: $(azureSubscription)
-              scriptType: "bash"
-              scriptLocation: "inlineScript"
-              inlineScript: |
-                set -e
-
-                RG="$(resourceGroupDev)"
-                REGION="eastus2"
-                ACR="$(acrName)"
-
-                echo "=== Ensuring Resource Group: $RG ==="
-                az group create --name "$RG" --location "$REGION" --output none
-                echo "Resource group ready."
-
-                echo "=== Ensuring ACR: $ACR ==="
-                if az acr show --name "$ACR" --resource-group "$RG" &>/dev/null; then
-                  echo "ACR already exists."
-                else
-                  az acr create \
-                    --name "$ACR" \
-                    --resource-group "$RG" \
-                    --location "$REGION" \
-                    --sku Standard \
-                    --admin-enabled false \
-                    --output none
-                  echo "ACR created."
-                fi
-            displayName: "Create Resource Group & ACR"
+              connectedServiceName: $(azureSubscription)
+              deploymentScope: "Subscription"
+              location: "eastus2"
+              templateLocation: "Linked artifact"
+              csmFile: "pipelines/infra/bootstrap.bicep"
+              overrideParameters: "-location eastus2 -acrName $(acrName) -environmentSuffix dev"
+              deploymentMode: "Incremental"
+              deploymentName: "bootstrap-infra-$(Build.BuildId)"
+            displayName: "Deploy bootstrap Bicep (RG + ACR)"
 
   # ── Stage 2: Push images to ACR ────────────────────────
   - stage: Push_to_ACR
@@ -93,7 +73,6 @@ stages:
         parameters:
           environment: "Dev"
           azureSubscription: $(azureSubscription)
-          resourceGroup: $(resourceGroupDev)
           region: "eastus2"
           acrName: $(acrName)
           imageTag: $(imageTag)
