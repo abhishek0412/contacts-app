@@ -1,70 +1,104 @@
-# Getting Started with Create React App
+# Contact Manager
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A modern React contact management application with a clean glassmorphism UI.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- **CRUD Operations** — Add, view, and delete contacts
+- **Search & Filter** — Real-time search by name or phone number
+- **Client-side Pagination** — 10 contacts per page with Prev/Next navigation
+- **Notifications** — Toast notifications for add/delete actions (auto-dismiss + manual close)
+- **Confirmation Dialogs** — Delete confirmation modal to prevent accidental deletions
+- **Form Validation** — Zod schema validation with React Hook Form (inline error messages)
+- **Contact Detail View** — Full-page view with avatar and contact info
 
-### `npm start`
+## Tech Stack
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- **React** — Functional components with hooks
+- **Redux Toolkit** — Centralized state management with slices and async thunks
+- **React Router** — Client-side routing (`/`, `/add`, `/contacts/:id`)
+- **React Hook Form + Zod** — Schema-based form validation
+- **Axios** — HTTP client for API calls
+- **json-server** — Mock REST API
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Architecture
 
-### `npm test`
+- **Lazy Loading** — Route components loaded on demand via `React.lazy` + `Suspense`
+- **Error Boundaries** — Graceful error handling with fallback UI
+- **Custom Hooks** — Shared utilities (`getInitials`)
+- **Barrel Exports** — Clean imports via `index.js` files
+- **Environment Variables** — API URL configured via `.env`
+- **No Prop Drilling** — Components read from Redux store directly via `useSelector`
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Project Structure
 
-### `npm run build`
+```
+frontend/
+├── public/
+├── src/
+│   ├── api/
+│   │   └── contacts.js          # API service layer (fetchAll, create, remove, etc.)
+│   ├── app/
+│   │   └── store.js             # Redux store configuration
+│   ├── components/
+│   │   ├── App.js               # Root component with routes
+│   │   ├── App.css              # Global styles
+│   │   ├── Header.js            # Navigation header with badge
+│   │   ├── ContactList.js       # Paginated contact list with search
+│   │   ├── ContactDetail.js     # Contact detail page
+│   │   ├── AddContacts.js       # Add contact form with Zod validation
+│   │   ├── Notification.js      # Toast notification component
+│   │   ├── ConfirmDialog.js     # Delete confirmation modal
+│   │   └── ErrorBoundary.js     # Error boundary wrapper
+│   ├── features/
+│   │   ├── contactsSlice.js     # Contacts state, thunks, reducers
+│   │   └── notificationSlice.js # Notification state management
+│   ├── hooks/
+│   │   └── useContactHelpers.js # Shared utility functions
+│   └── index.js                 # Entry point (Provider + BrowserRouter)
+server-api/
+├── db.json                      # Mock database (100 contacts)
+└── package.json
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Getting Started
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Prerequisites
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- Node.js (v16+)
 
-### `npm run eject`
+### Installation
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```bash
+# Install frontend dependencies
+cd frontend
+npm install
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+# Install server dependencies
+cd ../server-api
+npm install
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### Running the App
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+Start both servers:
 
-## Learn More
+```bash
+# Terminal 1 — Start the API server
+cd server-api
+npm start
+# Runs on http://localhost:3001
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+# Terminal 2 — Start the frontend
+cd frontend
+npm start
+# Runs on http://localhost:3000
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Environment Variables
 
-### Code Splitting
+Create a `.env` file in the `frontend/` directory:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+```
+REACT_APP_API_URL=http://localhost:3001
+```
