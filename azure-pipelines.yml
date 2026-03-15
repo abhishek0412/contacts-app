@@ -263,7 +263,7 @@ stages:
             displayName: "Export images as tar files"
 
           - script: |
-              TRIVY_VERSION="0.62.1"
+              TRIVY_VERSION="0.69.3"
               curl -sSfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
                 | tar -xz -C /usr/local/bin trivy
             displayName: "Install Trivy"
