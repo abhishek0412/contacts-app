@@ -1,0 +1,32 @@
+# Template: Smoke tests against a deployed environment
+
+parameters:
+  - name: frontendUrl
+    type: string
+  - name: azureSubscription
+    type: string
+
+steps:
+  - task: AzureCLI@2
+    inputs:
+      azureSubscription: "${{ parameters.azureSubscription }}"
+      scriptType: "bash"
+      scriptLocation: "inlineScript"
+      inlineScript: |
+        FRONTEND_URL="${{ parameters.frontendUrl }}"
+
+        echo "=== Waiting for apps to stabilize ==="
+        sleep 30
+
+        for ENDPOINT in "/" "/api/contacts"; do
+          echo "=== Smoke test: $ENDPOINT ==="
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --retry 5 --retry-delay 10 --retry-all-errors --max-time 30 "https://${FRONTEND_URL}${ENDPOINT}")
+          echo "Responded with: $STATUS"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "##vso[task.logissue type=error]Smoke test failed — $ENDPOINT returned $STATUS"
+            exit 1
+          fi
+        done
+
+        echo "Smoke tests passed!"
+    displayName: "Run smoke tests"

@@ -1,5 +1,4 @@
 # Template: Deploy to a specific region using Azure Container Apps
-# Uses subscription-level Bicep — creates RG + all resources via IaC
 
 parameters:
   - name: environment
@@ -45,16 +44,15 @@ jobs:
                 deploymentMode: "Incremental"
                 deploymentName: "deploy-${{ parameters.envSuffix }}-$(Build.BuildId)"
                 deploymentOutputs: "armOutputs"
-              displayName: "Deploy via Bicep (subscription-level)"
+              displayName: "Deploy Bicep"
 
             - pwsh: |
                 $outputs = '$(armOutputs)' | ConvertFrom-Json
                 $fqdn = $outputs.frontendFqdn.value
                 Write-Host "Frontend FQDN: $fqdn"
                 Write-Host "##vso[task.setvariable variable=frontendFqdn]$fqdn"
-              displayName: "Parse Bicep deployment outputs"
+              displayName: "Parse deployment outputs"
 
-            # Canary: set traffic split if not 100%
             - ${{ if ne(parameters.canaryPercentage, 100) }}:
                 - task: AzureCLI@2
                   inputs:
@@ -62,42 +60,13 @@ jobs:
                     scriptType: "bash"
                     scriptLocation: "inlineScript"
                     inlineScript: |
-                      SUFFIX="${{ parameters.envSuffix }}"
-                      RG="rg-contacts-${SUFFIX}"
-
-                      echo "=== Setting canary traffic: ${{ parameters.canaryPercentage }}% to latest ==="
                       az containerapp ingress traffic set \
-                        --name "contacts-frontend-${SUFFIX}" \
-                        --resource-group "$RG" \
+                        --name "contacts-frontend-${{ parameters.envSuffix }}" \
+                        --resource-group "rg-contacts-${{ parameters.envSuffix }}" \
                         --revision-weight latest=${{ parameters.canaryPercentage }}
                   displayName: "Set canary traffic (${{ parameters.canaryPercentage }}%)"
 
-            - task: AzureCLI@2
-              inputs:
+            - template: smoke-test.yml
+              parameters:
+                frontendUrl: $(frontendFqdn)
                 azureSubscription: "${{ parameters.azureSubscription }}"
-                scriptType: "bash"
-                scriptLocation: "inlineScript"
-                inlineScript: |
-                  FRONTEND_URL="$(frontendFqdn)"
-
-                  echo "=== Waiting for apps to stabilize ==="
-                  sleep 30
-
-                  echo "=== Smoke test — Frontend ==="
-                  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --retry 5 --retry-delay 10 --retry-all-errors --max-time 30 "https://${FRONTEND_URL}/")
-                  echo "Frontend responded with: $HTTP_STATUS"
-                  if [ "$HTTP_STATUS" -ne 200 ]; then
-                    echo "##vso[task.logissue type=error]Smoke test failed — frontend returned $HTTP_STATUS"
-                    exit 1
-                  fi
-
-                  echo "=== Smoke test — API (via frontend proxy) ==="
-                  API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --retry 5 --retry-delay 10 --retry-all-errors --max-time 30 "https://${FRONTEND_URL}/api/contacts")
-                  echo "API responded with: $API_STATUS"
-                  if [ "$API_STATUS" -ne 200 ]; then
-                    echo "##vso[task.logissue type=error]Smoke test failed — API returned $API_STATUS"
-                    exit 1
-                  fi
-
-                  echo "Smoke tests passed!"
-              displayName: "Run smoke tests"

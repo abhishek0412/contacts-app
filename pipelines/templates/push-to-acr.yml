@@ -1,4 +1,4 @@
-# Template: Load Docker tar artifacts and push to Azure Container Registry
+# Template: Provision ACR, load Docker tar artifacts, and push to registry
 
 parameters:
   - name: acrName
@@ -9,11 +9,29 @@ parameters:
     type: string
   - name: imageVersion
     type: string
+  - name: region
+    type: string
+    default: "eastus2"
+  - name: envSuffix
+    type: string
+    default: "dev"
 
 jobs:
-  - job: PushToACR
-    displayName: "Push Images to ACR"
+  - job: Push
+    displayName: "Push"
     steps:
+      - task: AzureResourceManagerTemplateDeployment@3
+        inputs:
+          connectedServiceName: "${{ parameters.azureSubscription }}"
+          deploymentScope: "Subscription"
+          location: "${{ parameters.region }}"
+          templateLocation: "Linked artifact"
+          csmFile: "pipelines/infra/bootstrap.bicep"
+          overrideParameters: "-location ${{ parameters.region }} -acrName ${{ parameters.acrName }} -environmentSuffix ${{ parameters.envSuffix }}"
+          deploymentMode: "Incremental"
+          deploymentName: "bootstrap-$(Build.BuildId)"
+        displayName: "Provision RG & ACR"
+
       - task: DownloadPipelineArtifact@2
         inputs:
           source: "specific"
@@ -28,7 +46,7 @@ jobs:
       - script: |
           docker load -i $(Pipeline.Workspace)/docker-images/contacts-app-api-${{ parameters.imageTag }}.tar
           docker load -i $(Pipeline.Workspace)/docker-images/contacts-app-frontend-${{ parameters.imageTag }}.tar
-        displayName: "Load Docker images from tar"
+        displayName: "Load Docker images"
 
       - task: AzureCLI@2
         inputs:
@@ -36,21 +54,16 @@ jobs:
           scriptType: "bash"
           scriptLocation: "inlineScript"
           inlineScript: |
-            az acr login --name ${{ parameters.acrName }}
+            ACR="${{ parameters.acrName }}"
+            IMAGE_TAG="${{ parameters.imageTag }}"
+            IMAGE_VER="${{ parameters.imageVersion }}"
 
-            # Tag and push API image
-            docker tag contacts-app-api:${{ parameters.imageTag }} ${{ parameters.acrName }}.azurecr.io/contacts-app-api:${{ parameters.imageTag }}
-            docker tag contacts-app-api:${{ parameters.imageVersion }} ${{ parameters.acrName }}.azurecr.io/contacts-app-api:${{ parameters.imageVersion }}
-            docker tag contacts-app-api:latest ${{ parameters.acrName }}.azurecr.io/contacts-app-api:latest
-            docker push ${{ parameters.acrName }}.azurecr.io/contacts-app-api:${{ parameters.imageTag }}
-            docker push ${{ parameters.acrName }}.azurecr.io/contacts-app-api:${{ parameters.imageVersion }}
-            docker push ${{ parameters.acrName }}.azurecr.io/contacts-app-api:latest
+            az acr login --name "$ACR"
 
-            # Tag and push Frontend image
-            docker tag contacts-app-frontend:${{ parameters.imageTag }} ${{ parameters.acrName }}.azurecr.io/contacts-app-frontend:${{ parameters.imageTag }}
-            docker tag contacts-app-frontend:${{ parameters.imageVersion }} ${{ parameters.acrName }}.azurecr.io/contacts-app-frontend:${{ parameters.imageVersion }}
-            docker tag contacts-app-frontend:latest ${{ parameters.acrName }}.azurecr.io/contacts-app-frontend:latest
-            docker push ${{ parameters.acrName }}.azurecr.io/contacts-app-frontend:${{ parameters.imageTag }}
-            docker push ${{ parameters.acrName }}.azurecr.io/contacts-app-frontend:${{ parameters.imageVersion }}
-            docker push ${{ parameters.acrName }}.azurecr.io/contacts-app-frontend:latest
-        displayName: "Tag & push images to ACR"
+            for IMAGE in contacts-app-api contacts-app-frontend; do
+              for TAG in "$IMAGE_TAG" "$IMAGE_VER" "latest"; do
+                docker tag "$IMAGE:$IMAGE_TAG" "$ACR.azurecr.io/$IMAGE:$TAG"
+                docker push "$ACR.azurecr.io/$IMAGE:$TAG"
+              done
+            done
+        displayName: "Tag & push images"
