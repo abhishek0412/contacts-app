@@ -3,6 +3,8 @@ const rateLimit = require("express-rate-limit");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const swaggerJsdoc = require("swagger-jsdoc");
+const swaggerUi = require("swagger-ui-express");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,7 +26,77 @@ app.use((req, res, next) => {
 // Body parser with size limit (prevents payload flooding — STRIDE D-4)
 app.use(express.json({ limit: "10kb" }));
 
+// --- Swagger / OpenAPI ---
+const swaggerSpec = swaggerJsdoc({
+  definition: {
+    openapi: "3.0.0",
+    info: {
+      title: "Contacts API",
+      version: "1.0.0",
+      description: "REST API for managing contacts",
+    },
+    components: {
+      schemas: {
+        Contact: {
+          type: "object",
+          required: ["name", "phone"],
+          properties: {
+            id: { type: "string", format: "uuid", readOnly: true },
+            name: { type: "string", minLength: 2, example: "Jane Doe" },
+            phone: {
+              type: "string",
+              minLength: 10,
+              pattern: "^[\\d\\s()+-]+$",
+              example: "(555) 123-4567",
+            },
+          },
+        },
+        Error: {
+          type: "object",
+          properties: {
+            error: { type: "string" },
+          },
+        },
+      },
+    },
+  },
+  apis: ["./server.js"],
+});
+
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+/**
+ * @openapi
+ * /api-docs:
+ *   get:
+ *     summary: OpenAPI documentation UI
+ *     responses:
+ *       200:
+ *         description: Swagger UI
+ */
+
 // --- Health check (before rate limiters) ---
+
+/**
+ * @openapi
+ * /healthz:
+ *   get:
+ *     summary: Health check
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: Service healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *       503:
+ *         description: Service unhealthy
+ */
 app.get("/healthz", (req, res) => {
   try {
     readDb();
@@ -68,12 +140,54 @@ function writeDb(data) {
 
 // --- Routes ---
 
+/**
+ * @openapi
+ * /contacts:
+ *   get:
+ *     summary: List all contacts
+ *     tags: [Contacts]
+ *     responses:
+ *       200:
+ *         description: Array of contacts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Contact'
+ */
 // GET /contacts
 app.get("/contacts", (req, res) => {
   const db = readDb();
   res.json(db.contacts);
 });
 
+/**
+ * @openapi
+ * /contacts/{id}:
+ *   get:
+ *     summary: Get a contact by ID
+ *     tags: [Contacts]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Contact found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Contact'
+ *       404:
+ *         description: Contact not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // GET /contacts/:id
 app.get("/contacts/:id", (req, res) => {
   const db = readDb();
@@ -82,6 +196,44 @@ app.get("/contacts/:id", (req, res) => {
   res.json(contact);
 });
 
+/**
+ * @openapi
+ * /contacts:
+ *   post:
+ *     summary: Create a new contact
+ *     tags: [Contacts]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, phone]
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 minLength: 2
+ *                 example: Jane Doe
+ *               phone:
+ *                 type: string
+ *                 minLength: 10
+ *                 example: "(555) 123-4567"
+ *     responses:
+ *       201:
+ *         description: Contact created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Contact'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       429:
+ *         description: Rate limit exceeded
+ */
 // POST /contacts (rate-limited)
 app.post("/contacts", writeLimiter, (req, res) => {
   const { name, phone } = req.body;
@@ -103,6 +255,30 @@ app.post("/contacts", writeLimiter, (req, res) => {
   res.status(201).json(contact);
 });
 
+/**
+ * @openapi
+ * /contacts/{id}:
+ *   delete:
+ *     summary: Delete a contact
+ *     tags: [Contacts]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Contact deleted
+ *       404:
+ *         description: Contact not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       429:
+ *         description: Rate limit exceeded
+ */
 // DELETE /contacts/:id (rate-limited)
 app.delete("/contacts/:id", writeLimiter, (req, res) => {
   const db = readDb();
