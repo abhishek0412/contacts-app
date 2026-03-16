@@ -105,3 +105,111 @@ Create a `.env` file in the `frontend/` directory:
 ```
 REACT_APP_API_URL=http://localhost:3001
 ```
+
+## Deployment Architecture
+
+```mermaid
+graph TB
+    subgraph "Developer"
+        DEV[Developer Workstation]
+    end
+
+    subgraph "Azure DevOps"
+        direction TB
+        subgraph "CI Pipeline — contacts-app-ci"
+            direction LR
+            SCAN[Scan<br/><small>Gitleaks · Hadolint<br/>Checkov · BicepLint<br/>npm audit</small>]
+            TEST[Test<br/><small>Jest API · Jest Frontend</small>]
+            E2E[E2E<br/><small>Playwright</small>]
+            BUILD[Build<br/><small>Docker build · Trivy<br/>Tar artifacts</small>]
+            SCAN --> TEST --> E2E --> BUILD
+        end
+
+        subgraph "CD Pipeline — contacts-app-cd"
+            direction LR
+            PUSH[Push<br/><small>Bootstrap ACR<br/>Tag & push images</small>]
+            DEPLOY[Deploy<br/><small>Bicep IaC<br/>Smoke tests</small>]
+            PUSH --> DEPLOY
+        end
+
+        ART[(Pipeline<br/>Artifacts<br/><small>.tar files</small>)]
+        BUILD -.-> ART -.-> PUSH
+    end
+
+    subgraph "Azure — eastus2"
+        subgraph "rg-contacts-dev"
+            ACR[Azure Container<br/>Registry<br/><small>Basic SKU</small>]
+
+            LOG[Log Analytics<br/>Workspace]
+
+            subgraph "Container Apps Environment"
+                direction TB
+
+                subgraph "Frontend App — external"
+                    FE_ENVOY[Envoy Sidecar<br/><small>HTTPS termination</small>]
+                    FE_NGINX[Nginx :80<br/><small>SPA + reverse proxy<br/>Security headers</small>]
+                    FE_ENVOY --> FE_NGINX
+                end
+
+                subgraph "API App — internal"
+                    API_ENVOY[Envoy Sidecar<br/><small>HTTPS termination</small>]
+                    API_NODE[Node.js :3001<br/><small>Express + json-server<br/>Rate limiting</small>]
+                    API_ENVOY --> API_NODE
+                end
+
+                FE_NGINX -- "proxy_pass<br/>HTTPS + SNI" --> API_ENVOY
+            end
+
+            ACR -.-> |pull images| FE_NGINX
+            ACR -.-> |pull images| API_NODE
+            LOG -.-> |collect logs| FE_NGINX
+            LOG -.-> |collect logs| API_NODE
+        end
+    end
+
+    DEV -- "git push" --> SCAN
+    DEPLOY -- "Bicep<br/>subscription deploy" --> ACR
+
+    USERS((Users)) -- "HTTPS" --> FE_ENVOY
+
+    classDef azure fill:#0078d4,color:#fff,stroke:#005a9e
+    classDef pipeline fill:#f59e0b,color:#000,stroke:#d97706
+    classDef container fill:#10b981,color:#fff,stroke:#059669
+    classDef user fill:#8b5cf6,color:#fff,stroke:#7c3aed
+
+    class ACR,LOG azure
+    class SCAN,TEST,E2E,BUILD,PUSH,DEPLOY pipeline
+    class FE_ENVOY,FE_NGINX,API_ENVOY,API_NODE container
+    class USERS,DEV user
+```
+
+### Pipeline Flow
+
+| Pipeline | Stages | Purpose |
+|----------|--------|---------|
+| **CI** | Scan → Test → E2E → Build | Security scans, unit/integration/E2E tests, Docker image build + Trivy scan |
+| **CD** | Push → Deploy | Provision ACR, push images, deploy via Bicep, smoke tests |
+
+### Azure Resources
+
+| Resource | SKU | Details |
+|----------|-----|---------|
+| Resource Group | — | `rg-contacts-dev` in `eastus2` |
+| Container Registry | Basic | Admin credentials, public access |
+| Log Analytics | PerGB2018 | 30-day retention |
+| Container Apps Env | — | Zone redundancy off (free tier) |
+| API App | 0.25 vCPU / 0.5 Gi | Internal ingress, min 1 replica, `/healthz` probes |
+| Frontend App | 0.25 vCPU / 0.5 Gi | External ingress, scale-to-zero, Nginx reverse proxy |
+
+### Infrastructure as Code
+
+All infrastructure is defined in **Bicep** with subscription-level deployments:
+
+```
+pipelines/infra/
+├── bootstrap.bicep          # RG + ACR (pre-push provisioning)
+├── main.bicep               # Subscription-level orchestrator
+└── modules/
+    ├── acr.bicep             # ACR module
+    └── resources.bicep       # ACR + Log Analytics + ACA Env + Apps
+```
