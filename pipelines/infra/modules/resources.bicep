@@ -1,7 +1,7 @@
 // ╔══════════════════════════════════════════════════════════╗
 // ║  Resources Bicep — All resources in one Resource Group   ║
-// ║  ACR + Log Analytics + ACA Environment + Apps + RBAC     ║
-// ║  Uses user-assigned identities to avoid circular deps    ║
+// ║  ACR + Log Analytics + ACA Environment + Apps            ║
+// ║  Uses ACR admin credentials (Contributor role only)      ║
 // ╚══════════════════════════════════════════════════════════╝
 
 @description('Azure region')
@@ -19,12 +19,6 @@ param apiImageTag string
 @description('Frontend image tag')
 param frontendImageTag string
 
-// ── Built-in role definition ────────────────────────────
-var acrPullRoleId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
-)
-
 // ── Azure Container Registry ────────────────────────────
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: acrName
@@ -33,42 +27,8 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
     name: 'Basic'
   }
   properties: {
-    adminUserEnabled: false
+    adminUserEnabled: true
     publicNetworkAccess: 'Enabled'
-  }
-}
-
-// ── User-Assigned Managed Identities ────────────────────
-// Created BEFORE container apps so we can assign AcrPull first
-resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'id-contacts-api-${environmentSuffix}'
-  location: location
-}
-
-resource frontendIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'id-contacts-frontend-${environmentSuffix}'
-  location: location
-}
-
-// ── ACR Pull role assignments ───────────────────────────
-// Assigned BEFORE container apps are created so image pull succeeds
-resource apiAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, apiIdentity.id, 'acrpull')
-  scope: acr
-  properties: {
-    roleDefinitionId: acrPullRoleId
-    principalId: apiIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource frontendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, frontendIdentity.id, 'acrpull')
-  scope: acr
-  properties: {
-    roleDefinitionId: acrPullRoleId
-    principalId: frontendIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
   }
 }
 
@@ -104,13 +64,6 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'contacts-api-${environmentSuffix}'
   location: location
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${apiIdentity.id}': {}
-    }
-  }
-  dependsOn: [apiAcrPull] // Ensure AcrPull role is assigned before image pull
   properties: {
     managedEnvironmentId: containerAppEnv.id
     configuration: {
@@ -125,7 +78,14 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: acr.properties.loginServer
-          identity: apiIdentity.id
+          username: acr.listCredentials().username
+          passwordSecretRef: 'acr-password'
+        }
+      ]
+      secrets: [
+        {
+          name: 'acr-password'
+          value: acr.listCredentials().passwords[0].value
         }
       ]
     }
@@ -176,13 +136,6 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
 resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'contacts-frontend-${environmentSuffix}'
   location: location
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${frontendIdentity.id}': {}
-    }
-  }
-  dependsOn: [frontendAcrPull] // Ensure AcrPull role is assigned before image pull
   properties: {
     managedEnvironmentId: containerAppEnv.id
     configuration: {
@@ -197,7 +150,14 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: acr.properties.loginServer
-          identity: frontendIdentity.id
+          username: acr.listCredentials().username
+          passwordSecretRef: 'acr-password'
+        }
+      ]
+      secrets: [
+        {
+          name: 'acr-password'
+          value: acr.listCredentials().passwords[0].value
         }
       ]
     }
