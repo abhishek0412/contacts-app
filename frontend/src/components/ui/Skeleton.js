@@ -1,7 +1,11 @@
 import React from "react";
 
 export const ContactListSkeleton = ({ count = 5 }) => (
-  <div className="glass-card contact-list-card" role="status" aria-label="Loading contacts">
+  <div
+    className="glass-card contact-list-card"
+    role="status"
+    aria-label="Loading contacts"
+  >
     <div className="skeleton-heading" />
     <div className="skeleton-search" />
     {Array.from({ length: count }, (_, i) => (
