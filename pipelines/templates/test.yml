@@ -1,4 +1,4 @@
-# Template: Unit & integration tests
+# Template: Unit & integration tests with coverage
 
 parameters:
   - name: nodeVersion
@@ -16,7 +16,7 @@ jobs:
       - script: cd server-api && npm ci && npm install --no-save jest-junit
         displayName: "Install"
 
-      - script: cd server-api && npx jest --ci --reporters=default --reporters=jest-junit
+      - script: cd server-api && npx jest --ci --coverage --coverageReporters=cobertura --coverageReporters=text --reporters=default --reporters=jest-junit
         displayName: "Test"
         env:
           JEST_JUNIT_OUTPUT_DIR: "$(System.DefaultWorkingDirectory)/server-api/test-results"
@@ -30,6 +30,12 @@ jobs:
         condition: succeededOrFailed()
         displayName: "Publish results"
 
+      - task: PublishCodeCoverageResults@2
+        inputs:
+          summaryFileLocation: "$(System.DefaultWorkingDirectory)/server-api/coverage/cobertura-coverage.xml"
+        condition: succeededOrFailed()
+        displayName: "Publish coverage"
+
   - job: Frontend
     displayName: "Frontend Tests"
     steps:
@@ -41,7 +47,7 @@ jobs:
       - script: cd frontend && npm ci && npm install --no-save jest-junit
         displayName: "Install"
 
-      - script: cd frontend && npx react-scripts test --ci --watchAll=false --reporters=default --reporters=jest-junit
+      - script: cd frontend && npx react-scripts test --ci --watchAll=false --coverage --coverageReporters=cobertura --coverageReporters=text --reporters=default --reporters=jest-junit
         displayName: "Test"
         env:
           JEST_JUNIT_OUTPUT_DIR: "$(System.DefaultWorkingDirectory)/frontend/test-results"
@@ -55,3 +61,9 @@ jobs:
           testRunTitle: "Frontend Tests"
         condition: succeededOrFailed()
         displayName: "Publish results"
+
+      - task: PublishCodeCoverageResults@2
+        inputs:
+          summaryFileLocation: "$(System.DefaultWorkingDirectory)/frontend/coverage/cobertura-coverage.xml"
+        condition: succeededOrFailed()
+        displayName: "Publish coverage"

@@ -110,7 +110,11 @@ const ContactList = () => {
         <>
           {renderContactList}
           {totalPages > 1 && (
-            <div className="pagination" role="navigation" aria-label="Pagination">
+            <div
+              className="pagination"
+              role="navigation"
+              aria-label="Pagination"
+            >
               <button
                 className="page-btn"
                 disabled={currentPage === 1}

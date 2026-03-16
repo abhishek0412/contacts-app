@@ -27,11 +27,7 @@ const ConfirmDialog = ({ message, onConfirm, onCancel }) => {
       >
         <p id="confirm-title">{message}</p>
         <div className="confirm-actions">
-          <button
-            className="btn-cancel"
-            onClick={onCancel}
-            ref={cancelRef}
-          >
+          <button className="btn-cancel" onClick={onCancel} ref={cancelRef}>
             Cancel
           </button>
           <button className="btn-confirm" onClick={onConfirm}>
