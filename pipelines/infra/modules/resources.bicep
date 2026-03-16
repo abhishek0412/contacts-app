@@ -30,17 +30,11 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: acrName
   location: location
   sku: {
-    name: 'Standard'
+    name: 'Basic'
   }
   properties: {
     adminUserEnabled: false
     publicNetworkAccess: 'Enabled'
-    dataEndpointEnabled: false
-    policies: {
-      exportPolicy: {
-        status: 'disabled'
-      }
-    }
   }
 }
 
@@ -120,7 +114,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: containerAppEnv.id
     configuration: {
-      activeRevisionsMode: 'Multiple'
+      activeRevisionsMode: 'Single'
       ingress: {
         external: false
         targetPort: 3001
@@ -165,8 +159,8 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 1
-        maxReplicas: 5
+        minReplicas: 0
+        maxReplicas: 2
         rules: [
           {
             name: 'http-scaling'
@@ -192,7 +186,7 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: containerAppEnv.id
     configuration: {
-      activeRevisionsMode: 'Multiple'
+      activeRevisionsMode: 'Single'
       ingress: {
         external: true
         targetPort: 80
@@ -236,8 +230,8 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 1
-        maxReplicas: 5
+        minReplicas: 0
+        maxReplicas: 2
         rules: [
           {
             name: 'http-scaling'
