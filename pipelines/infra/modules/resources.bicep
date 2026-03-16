@@ -72,7 +72,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
         external: false
         targetPort: 3001
         transport: 'auto'
-        allowInsecure: true
+        allowInsecure: false
         clientCertificateMode: 'ignore'
       }
       registries: [
@@ -105,15 +105,15 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
           probes: [
             {
               type: 'Liveness'
-              httpGet: { path: '/contacts', port: 3001 }
-              initialDelaySeconds: 10
-              periodSeconds: 30
+              httpGet: { path: '/healthz', port: 3001 }
+              initialDelaySeconds: 15
+              periodSeconds: 60
             }
             {
               type: 'Readiness'
-              httpGet: { path: '/contacts', port: 3001 }
+              httpGet: { path: '/healthz', port: 3001 }
               initialDelaySeconds: 5
-              periodSeconds: 10
+              periodSeconds: 30
             }
           ]
         }
@@ -171,7 +171,7 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
             memory: '0.5Gi'
           }
           env: [
-            { name: 'API_PROXY_PASS', value: 'http://${apiApp.properties.configuration.ingress.fqdn}/' }
+            { name: 'API_PROXY_PASS', value: 'https://${apiApp.properties.configuration.ingress.fqdn}/' }
           ]
           probes: [
             {

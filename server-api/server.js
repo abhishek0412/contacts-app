@@ -24,6 +24,16 @@ app.use((req, res, next) => {
 // Body parser with size limit (prevents payload flooding — STRIDE D-4)
 app.use(express.json({ limit: "10kb" }));
 
+// --- Health check (before rate limiters) ---
+app.get("/healthz", (req, res) => {
+  try {
+    readDb();
+    res.json({ status: "ok" });
+  } catch {
+    res.status(503).json({ status: "error" });
+  }
+});
+
 // --- Rate Limiters ---
 
 // Global: 100 requests per 15 minutes per IP
