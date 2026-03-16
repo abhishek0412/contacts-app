@@ -185,21 +185,21 @@ graph TB
 
 ### Pipeline Flow
 
-| Pipeline | Stages | Purpose |
-|----------|--------|---------|
-| **CI** | Scan → Test → E2E → Build | Security scans, unit/integration/E2E tests, Docker image build + Trivy scan |
-| **CD** | Push → Deploy | Provision ACR, push images, deploy via Bicep, smoke tests |
+| Pipeline | Stages                    | Purpose                                                                     |
+| -------- | ------------------------- | --------------------------------------------------------------------------- |
+| **CI**   | Scan → Test → E2E → Build | Security scans, unit/integration/E2E tests, Docker image build + Trivy scan |
+| **CD**   | Push → Deploy             | Provision ACR, push images, deploy via Bicep, smoke tests                   |
 
 ### Azure Resources
 
-| Resource | SKU | Details |
-|----------|-----|---------|
-| Resource Group | — | `rg-contacts-dev` in `eastus2` |
-| Container Registry | Basic | Admin credentials, public access |
-| Log Analytics | PerGB2018 | 30-day retention |
-| Container Apps Env | — | Zone redundancy off (free tier) |
-| API App | 0.25 vCPU / 0.5 Gi | Internal ingress, min 1 replica, `/healthz` probes |
-| Frontend App | 0.25 vCPU / 0.5 Gi | External ingress, scale-to-zero, Nginx reverse proxy |
+| Resource           | SKU                | Details                                              |
+| ------------------ | ------------------ | ---------------------------------------------------- |
+| Resource Group     | —                  | `rg-contacts-dev` in `eastus2`                       |
+| Container Registry | Basic              | Admin credentials, public access                     |
+| Log Analytics      | PerGB2018          | 30-day retention                                     |
+| Container Apps Env | —                  | Zone redundancy off (free tier)                      |
+| API App            | 0.25 vCPU / 0.5 Gi | Internal ingress, min 1 replica, `/healthz` probes   |
+| Frontend App       | 0.25 vCPU / 0.5 Gi | External ingress, scale-to-zero, Nginx reverse proxy |
 
 ### Infrastructure as Code
 
