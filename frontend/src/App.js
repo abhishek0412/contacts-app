@@ -11,13 +11,17 @@ const ContactDetail = lazy(() => import("./pages/ContactDetail.js"));
 
 function App() {
   return (
-    <div>
+    <>
       <Header />
       <Notification />
-      <div className="app-container">
+      <main className="app-container">
         <ErrorBoundary>
           <Suspense
-            fallback={<div className="loading-spinner">Loading...</div>}
+            fallback={
+              <div className="loading-spinner" role="status">
+                <span>Loading...</span>
+              </div>
+            }
           >
             <Routes>
               <Route path="/" element={<ContactList />} />
@@ -26,8 +30,8 @@ function App() {
             </Routes>
           </Suspense>
         </ErrorBoundary>
-      </div>
-    </div>
+      </main>
+    </>
   );
 }
 

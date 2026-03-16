@@ -32,27 +32,45 @@ const AddContacts = () => {
   return (
     <div className="glass-card add-contact-card">
       <h2>Add Contact</h2>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleSubmit(onSubmit)} aria-busy={isLoading}>
         <div className="form-group">
+          <label htmlFor="name" className="sr-only">
+            Name
+          </label>
           <input
+            id="name"
             type="text"
             placeholder="Name"
+            aria-required="true"
+            aria-invalid={!!errors.name}
+            aria-describedby={errors.name ? "name-error" : undefined}
             {...register("name")}
             className={errors.name ? "input-error" : ""}
           />
           {errors.name && (
-            <span className="field-error">{errors.name.message}</span>
+            <span id="name-error" className="field-error" role="alert">
+              {errors.name.message}
+            </span>
           )}
         </div>
         <div className="form-group">
+          <label htmlFor="phone" className="sr-only">
+            Phone Number
+          </label>
           <input
-            type="text"
+            id="phone"
+            type="tel"
             placeholder="Phone Number"
+            aria-required="true"
+            aria-invalid={!!errors.phone}
+            aria-describedby={errors.phone ? "phone-error" : undefined}
             {...register("phone")}
             className={errors.phone ? "input-error" : ""}
           />
           {errors.phone && (
-            <span className="field-error">{errors.phone.message}</span>
+            <span id="phone-error" className="field-error" role="alert">
+              {errors.phone.message}
+            </span>
           )}
         </div>
         <button className="btn-add" type="submit" disabled={isLoading}>

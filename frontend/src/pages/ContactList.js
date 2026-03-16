@@ -45,11 +45,19 @@ const ContactList = () => {
   };
 
   if (isLoading) {
-    return <div className="loading-spinner">Loading contacts...</div>;
+    return (
+      <div className="loading-spinner" role="status">
+        Loading contacts...
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="error-message">Failed to load contacts.</div>;
+    return (
+      <div className="error-message" role="alert">
+        Failed to load contacts.
+      </div>
+    );
   }
 
   const renderContactList = paginatedContacts.map((contact) => {
@@ -68,6 +76,7 @@ const ContactList = () => {
         </div>
         <button
           className="btn-delete"
+          aria-label={`Delete ${contact.name}`}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -87,11 +96,12 @@ const ContactList = () => {
         type="text"
         className="search-input"
         placeholder="Search contacts..."
+        aria-label="Search contacts"
         value={searchTerm}
         onChange={handleSearch}
       />
       {filteredContacts.length === 0 ? (
-        <div className="empty-state">
+        <div className="empty-state" role="status">
           {contacts.length === 0
             ? "No contacts yet. Add one!"
             : "No contacts match your search."}
@@ -100,21 +110,23 @@ const ContactList = () => {
         <>
           {renderContactList}
           {totalPages > 1 && (
-            <div className="pagination">
+            <div className="pagination" role="navigation" aria-label="Pagination">
               <button
                 className="page-btn"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage((p) => p - 1)}
+                aria-label="Previous page"
               >
                 &laquo; Prev
               </button>
-              <span className="page-info">
-                {currentPage} / {totalPages}
+              <span className="page-info" aria-current="page">
+                Page {currentPage} of {totalPages}
               </span>
               <button
                 className="page-btn"
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage((p) => p + 1)}
+                aria-label="Next page"
               >
                 Next &raquo;
               </button>

@@ -9,7 +9,11 @@ const ContactDetail = () => {
   const contact = contacts.find((c) => String(c.id) === id);
 
   if (isLoading) {
-    return <div className="loading-spinner">Loading contact...</div>;
+    return (
+      <div className="loading-spinner" role="status">
+        Loading contact...
+      </div>
+    );
   }
 
   if (!contact) {
@@ -31,7 +35,7 @@ const ContactDetail = () => {
         <p>{contact.phone}</p>
         {contact.email && <p>{contact.email}</p>}
       </div>
-      <Link to="/" className="btn-back">
+      <Link to="/" className="btn-back" aria-label="Back to Contacts">
         &larr; Back to Contacts
       </Link>
     </div>

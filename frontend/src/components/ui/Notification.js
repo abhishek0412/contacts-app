@@ -18,11 +18,17 @@ const Notification = () => {
   if (!message) return null;
 
   return (
-    <div className={`notification notification-${type}`}>
+    <div
+      className={`notification notification-${type}`}
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
       <span>{message}</span>
       <button
         className="notification-close"
         onClick={() => dispatch(clearNotification())}
+        aria-label="Dismiss notification"
       >
         &times;
       </button>
