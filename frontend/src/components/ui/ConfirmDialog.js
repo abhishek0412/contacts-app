@@ -17,13 +17,15 @@ const ConfirmDialog = ({ message, onConfirm, onCancel }) => {
   }, [handleKeyDown]);
 
   return (
-    <div className="confirm-overlay" onClick={onCancel} role="presentation">
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+    <div className="confirm-overlay" onMouseDown={onCancel} role="presentation">
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <div
         className="confirm-dialog"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-title"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <p id="confirm-title">{message}</p>
         <div className="confirm-actions">

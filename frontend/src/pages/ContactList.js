@@ -6,6 +6,7 @@ import {
 } from "../features/apiSlice";
 import { getInitials } from "../hooks/useContactHelpers";
 import ConfirmDialog from "../components/ui/ConfirmDialog";
+import { ContactListSkeleton } from "../components/ui/Skeleton";
 
 const CONTACTS_PER_PAGE = 5;
 
@@ -45,11 +46,7 @@ const ContactList = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="loading-spinner" role="status">
-        Loading contacts...
-      </div>
-    );
+    return <ContactListSkeleton />;
   }
 
   if (error) {

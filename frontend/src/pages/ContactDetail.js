@@ -2,6 +2,7 @@ import React from "react";
 import { useParams, Link } from "react-router-dom";
 import { useGetContactsQuery } from "../features/apiSlice";
 import { getInitials } from "../hooks/useContactHelpers";
+import { ContactDetailSkeleton } from "../components/ui/Skeleton";
 
 const ContactDetail = () => {
   const { id } = useParams();
@@ -9,11 +10,7 @@ const ContactDetail = () => {
   const contact = contacts.find((c) => String(c.id) === id);
 
   if (isLoading) {
-    return (
-      <div className="loading-spinner" role="status">
-        Loading contact...
-      </div>
-    );
+    return <ContactDetailSkeleton />;
   }
 
   if (!contact) {
