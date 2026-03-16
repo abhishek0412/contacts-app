@@ -1,0 +1,90 @@
+# Template: Security & lint scans
+
+jobs:
+  - job: Secrets
+    displayName: "Gitleaks"
+    steps:
+      - script: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+        displayName: "Install"
+
+      - script: |
+          gitleaks detect --source=. --verbose --report-format=sarif --report-path=$(System.DefaultWorkingDirectory)/gitleaks-report.sarif
+        displayName: "Scan"
+        continueOnError: true
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: "$(System.DefaultWorkingDirectory)/gitleaks-report.sarif"
+          ArtifactName: "security-reports"
+          publishLocation: "Container"
+        condition: succeededOrFailed()
+        displayName: "Publish report"
+
+  - job: BicepLint
+    displayName: "Bicep Lint"
+    steps:
+      - script: |
+          az bicep install
+          FAILED=0
+          for file in $(find pipelines/infra -name '*.bicep'); do
+            echo "--- $file ---"
+            if ! az bicep build --file "$file" --stdout > /dev/null; then
+              echo "##vso[task.logissue type=warning]Lint failed: $file"
+              FAILED=1
+            fi
+          done
+          [ $FAILED -eq 1 ] && exit 1 || echo "All files passed."
+        displayName: "Lint"
+        continueOnError: true
+
+  - job: Checkov
+    displayName: "Checkov IaC"
+    steps:
+      - script: pip install checkov --quiet
+        displayName: "Install"
+
+      - script: |
+          checkov \
+            --directory pipelines/infra \
+            --framework bicep \
+            --output cli \
+            --output junitxml \
+            --output-file-path .
+        displayName: "Scan"
+        continueOnError: true
+
+      - task: PublishTestResults@2
+        inputs:
+          testResultsFormat: "JUnit"
+          testResultsFiles: "results_junitxml.xml"
+          testRunTitle: "Checkov"
+          failTaskOnFailedTests: false
+        condition: succeededOrFailed()
+        displayName: "Publish results"
+
+  - job: Hadolint
+    displayName: "Hadolint"
+    steps:
+      - script: |
+          curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64" \
+            -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint
+        displayName: "Install"
+
+      - script: |
+          hadolint server-api/Dockerfile
+          hadolint frontend/Dockerfile
+        displayName: "Lint"
+        continueOnError: true
+
+  - job: DependencyAudit
+    displayName: "npm Audit"
+    steps:
+      - script: |
+          echo "--- server-api ---"
+          cd server-api && npm ci && npm audit --audit-level=high
+          echo "--- frontend ---"
+          cd ../frontend && npm ci && npm audit --audit-level=high
+        displayName: "Audit"
+        continueOnError: true

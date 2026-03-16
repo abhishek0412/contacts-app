@@ -1,0 +1,57 @@
+# Template: Unit & integration tests
+
+parameters:
+  - name: nodeVersion
+    type: string
+
+jobs:
+  - job: API
+    displayName: "API Tests"
+    steps:
+      - task: NodeTool@0
+        inputs:
+          versionSpec: "${{ parameters.nodeVersion }}"
+        displayName: "Node.js"
+
+      - script: cd server-api && npm ci && npm install --no-save jest-junit
+        displayName: "Install"
+
+      - script: cd server-api && npx jest --ci --reporters=default --reporters=jest-junit
+        displayName: "Test"
+        env:
+          JEST_JUNIT_OUTPUT_DIR: "$(System.DefaultWorkingDirectory)/server-api/test-results"
+          JEST_JUNIT_OUTPUT_NAME: "api-results.xml"
+
+      - task: PublishTestResults@2
+        inputs:
+          testResultsFormat: "JUnit"
+          testResultsFiles: "server-api/test-results/*.xml"
+          testRunTitle: "API Tests"
+        condition: succeededOrFailed()
+        displayName: "Publish results"
+
+  - job: Frontend
+    displayName: "Frontend Tests"
+    steps:
+      - task: NodeTool@0
+        inputs:
+          versionSpec: "${{ parameters.nodeVersion }}"
+        displayName: "Node.js"
+
+      - script: cd frontend && npm ci && npm install --no-save jest-junit
+        displayName: "Install"
+
+      - script: cd frontend && npx react-scripts test --ci --watchAll=false --reporters=default --reporters=jest-junit
+        displayName: "Test"
+        env:
+          JEST_JUNIT_OUTPUT_DIR: "$(System.DefaultWorkingDirectory)/frontend/test-results"
+          JEST_JUNIT_OUTPUT_NAME: "frontend-results.xml"
+          CI: "true"
+
+      - task: PublishTestResults@2
+        inputs:
+          testResultsFormat: "JUnit"
+          testResultsFiles: "frontend/test-results/*.xml"
+          testRunTitle: "Frontend Tests"
+        condition: succeededOrFailed()
+        displayName: "Publish results"

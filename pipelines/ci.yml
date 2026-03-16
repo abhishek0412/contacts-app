@@ -1,6 +1,6 @@
 # ╔══════════════════════════════════════════════════════════╗
 # ║  CI Pipeline — Contacts App                             ║
-# ║  Manual trigger only. Produces Docker tar artifacts.    ║
+# ║  Scan → Test → E2E → Build                              ║
 # ╚══════════════════════════════════════════════════════════╝
 
 trigger: none
@@ -21,63 +21,37 @@ variables:
   imageTag: "$(imageVersion)-$(Build.BuildId)"
 
 stages:
-  # ── Stage 0a: Secret Scanning ──────────────────────────
-  - stage: Secret_Scan
-    displayName: "Secret Scan"
+  # ── Stage 1: Security & Lint Scans ─────────────────────
+  - stage: Scan
+    displayName: "Scan"
     jobs:
-      - template: templates/security-scan.yml
+      - template: templates/scan.yml
 
-  # ── Stage 0b: Bicep IaC Scan (parallel with secrets) ───
-  - stage: Scan_Bicep
-    displayName: "Bicep IaC Scan"
+  # ── Stage 2: Unit & Integration Tests ──────────────────
+  - stage: Test
+    displayName: "Test"
+    dependsOn: Scan
+    condition: always()
     jobs:
-      - template: templates/scan-bicep.yml
-
-  # ── Stage 1: API Tests (after scans) ───────────────────
-  - stage: Test_API
-    displayName: "API Tests"
-    dependsOn:
-      - Secret_Scan
-      - Scan_Bicep
-    jobs:
-      - template: templates/test-api.yml
+      - template: templates/test.yml
         parameters:
           nodeVersion: $(nodeVersion)
 
-  # ── Stage 2: Frontend Tests (parallel with API) ────────
-  - stage: Test_Frontend
-    displayName: "Frontend Tests"
-    dependsOn:
-      - Secret_Scan
-      - Scan_Bicep
-    jobs:
-      - template: templates/test-frontend.yml
-        parameters:
-          nodeVersion: $(nodeVersion)
-
-  # ── Stage 3: E2E Tests (non-blocking) ──────────────────
-  - stage: Test_E2E
-    displayName: "E2E Tests (non-blocking)"
-    dependsOn:
-      - Test_API
-      - Test_Frontend
+  # ── Stage 3: E2E Tests ────────────────────────────────
+  - stage: E2E
+    displayName: "E2E"
+    dependsOn: Test
+    condition: always()
     jobs:
       - template: templates/test-e2e.yml
         parameters:
           nodeVersion: $(nodeVersion)
 
-  # ── Stage 4: Build Docker Images ───────────────────────
-  # Runs even if E2E fails (flaky UI tests)
-  - stage: Build_Docker
-    displayName: "Build Docker Images"
-    dependsOn:
-      - Test_E2E
-    condition: |
-      and(
-        not(failed('Test_API')),
-        not(failed('Test_Frontend')),
-        not(canceled())
-      )
+  # ── Stage 4: Build & Package ───────────────────────────
+  - stage: Build
+    displayName: "Build"
+    dependsOn: E2E
+    condition: not(canceled())
     jobs:
       - template: templates/build-docker.yml
         parameters:

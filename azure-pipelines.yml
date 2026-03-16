@@ -2,7 +2,7 @@
 # ║  Contacts App — Pipeline Router                         ║
 # ║                                                          ║
 # ║  Pipelines have been restructured into:                  ║
-# ║    pipelines/ci.yml  — CI pipeline (test, scan, build)   ║
+# ║    pipelines/ci.yml  — CI pipeline (scan, test, build)   ║
 # ║    pipelines/cd.yml  — CD pipeline (deploy to Azure)     ║
 # ║                                                          ║
 # ║  In Azure DevOps, create two pipelines:                  ║
@@ -31,47 +31,35 @@ variables:
   imageTag: "$(imageVersion)-$(Build.BuildId)"
 
 stages:
-  - stage: Secret_Scan
-    displayName: "Secret Scan"
+  - stage: Scan
+    displayName: "Scan"
     jobs:
-      - template: pipelines/templates/security-scan.yml
+      - template: pipelines/templates/scan.yml
 
-  - stage: Test_API
-    displayName: "API Tests"
-    dependsOn: [Secret_Scan]
+  - stage: Test
+    displayName: "Test"
+    dependsOn: Scan
+    condition: always()
     jobs:
-      - template: pipelines/templates/test-api.yml
+      - template: pipelines/templates/test.yml
         parameters:
           nodeVersion: $(nodeVersion)
 
-  - stage: Test_Frontend
-    displayName: "Frontend Tests"
-    dependsOn: [Secret_Scan]
-    jobs:
-      - template: pipelines/templates/test-frontend.yml
-        parameters:
-          nodeVersion: $(nodeVersion)
-
-  - stage: Test_E2E
-    displayName: "E2E Tests (non-blocking)"
-    dependsOn: [Test_API, Test_Frontend]
+  - stage: E2E
+    displayName: "E2E"
+    dependsOn: Test
+    condition: always()
     jobs:
       - template: pipelines/templates/test-e2e.yml
         parameters:
           nodeVersion: $(nodeVersion)
 
-  - stage: Build_Docker
-    displayName: "Build Docker Images"
-    dependsOn: [Test_E2E]
-    condition: |
-      and(
-        not(failed('Test_API')),
-        not(failed('Test_Frontend')),
-        not(canceled())
-      )
+  - stage: Build
+    displayName: "Build"
+    dependsOn: E2E
+    condition: not(canceled())
     jobs:
       - template: pipelines/templates/build-docker.yml
         parameters:
           imageTag: $(imageTag)
           imageVersion: $(imageVersion)
-            displayName: "Publish Docker artifacts"

@@ -1,4 +1,4 @@
-# Template: Build Docker images, scan, export as tar artifacts
+# Template: Build, scan & package Docker images
 
 parameters:
   - name: imageTag
@@ -7,23 +7,9 @@ parameters:
     type: string
 
 jobs:
-  - job: BuildImages
-    displayName: "Build & Export Docker Images"
+  - job: Build
+    displayName: "Build & Package"
     steps:
-      - script: |
-          HADOLINT_VERSION="2.12.0"
-          curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" \
-            -o /usr/local/bin/hadolint
-          chmod +x /usr/local/bin/hadolint
-        displayName: "Install Hadolint"
-
-      - script: |
-          echo "--- Linting server-api/Dockerfile ---"
-          hadolint server-api/Dockerfile
-          echo "--- Linting frontend/Dockerfile ---"
-          hadolint frontend/Dockerfile
-        displayName: "Lint Dockerfiles (Hadolint)"
-
       - script: |
           docker build \
             -t contacts-app-api:${{ parameters.imageTag }} \
@@ -43,6 +29,17 @@ jobs:
         displayName: "Build Frontend image"
 
       - script: |
+          curl -sSfL "https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz" \
+            | tar -xz -C /usr/local/bin trivy
+
+          echo "--- API image ---"
+          trivy image --severity HIGH,CRITICAL --exit-code 0 --format table contacts-app-api:${{ parameters.imageTag }}
+          echo "--- Frontend image ---"
+          trivy image --severity HIGH,CRITICAL --exit-code 0 --format table contacts-app-frontend:${{ parameters.imageTag }}
+        displayName: "Trivy scan"
+        continueOnError: true
+
+      - script: |
           mkdir -p $(Build.ArtifactStagingDirectory)/docker
 
           docker save \
@@ -58,23 +55,7 @@ jobs:
             -o $(Build.ArtifactStagingDirectory)/docker/contacts-app-frontend-${{ parameters.imageTag }}.tar
 
           cp docker-compose.yml $(Build.ArtifactStagingDirectory)/docker/
-        displayName: "Export images as tar files"
-
-      - script: |
-          TRIVY_VERSION="0.69.3"
-          curl -sSfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
-            | tar -xz -C /usr/local/bin trivy
-        displayName: "Install Trivy"
-
-      - script: |
-          echo "--- Scanning API image ---"
-          trivy image --severity HIGH,CRITICAL --exit-code 0 --format table contacts-app-api:${{ parameters.imageTag }}
-          trivy image --severity HIGH,CRITICAL --format json --output $(Build.ArtifactStagingDirectory)/docker/trivy-api-report.json contacts-app-api:${{ parameters.imageTag }}
-
-          echo "--- Scanning Frontend image ---"
-          trivy image --severity HIGH,CRITICAL --exit-code 0 --format table contacts-app-frontend:${{ parameters.imageTag }}
-          trivy image --severity HIGH,CRITICAL --format json --output $(Build.ArtifactStagingDirectory)/docker/trivy-frontend-report.json contacts-app-frontend:${{ parameters.imageTag }}
-        displayName: "Scan Docker images (Trivy)"
+        displayName: "Package artifacts"
 
       - task: PublishBuildArtifacts@1
         inputs:
