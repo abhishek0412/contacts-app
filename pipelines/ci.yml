@@ -21,17 +21,24 @@ variables:
   imageTag: "$(imageVersion)-$(Build.BuildId)"
 
 stages:
-  # ── Stage 0: Secret Scanning ───────────────────────────
+  # ── Stage 0a: Secret Scanning ──────────────────────────
   - stage: Secret_Scan
     displayName: "Secret Scan"
     jobs:
       - template: templates/security-scan.yml
 
-  # ── Stage 1: API Tests (after secret scan) ─────────────
+  # ── Stage 0b: Bicep IaC Scan (parallel with secrets) ───
+  - stage: Scan_Bicep
+    displayName: "Bicep IaC Scan"
+    jobs:
+      - template: templates/scan-bicep.yml
+
+  # ── Stage 1: API Tests (after scans) ───────────────────
   - stage: Test_API
     displayName: "API Tests"
     dependsOn:
       - Secret_Scan
+      - Scan_Bicep
     jobs:
       - template: templates/test-api.yml
         parameters:
@@ -42,6 +49,7 @@ stages:
     displayName: "Frontend Tests"
     dependsOn:
       - Secret_Scan
+      - Scan_Bicep
     jobs:
       - template: templates/test-frontend.yml
         parameters:

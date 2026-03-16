@@ -72,7 +72,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
         external: false
         targetPort: 3001
         transport: 'auto'
-        allowInsecure: false
+        allowInsecure: true
         clientCertificateMode: 'ignore'
       }
       registries: [
@@ -119,7 +119,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 2
         rules: [
           {
@@ -171,7 +171,7 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
             memory: '0.5Gi'
           }
           env: [
-            { name: 'API_PROXY_PASS', value: 'https://${apiApp.properties.configuration.ingress.fqdn}/' }
+            { name: 'API_PROXY_PASS', value: 'http://${apiApp.properties.configuration.ingress.fqdn}/' }
           ]
           probes: [
             {
