@@ -10,6 +10,9 @@ RUN npm ci --omit=dev
 COPY server.js ./
 COPY db.json ./
 
+# Give node user write access to db.json
+RUN chown node:node /app/db.json
+
 # Run as built-in non-root user
 USER node
 
