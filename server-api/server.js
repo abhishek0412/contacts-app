@@ -1,14 +1,42 @@
 const express = require("express");
 const rateLimit = require("express-rate-limit");
-const crypto = require("crypto");
-const fs = require("fs");
-const path = require("path");
+const { Pool } = require("pg");
+const admin = require("firebase-admin");
 const swaggerJsdoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const DB_PATH = path.join(__dirname, "db.json");
+
+// --- Database ---
+const pool = new Pool({
+  connectionString:
+    process.env.DATABASE_URL ||
+    "postgresql://contacts_user:contacts_pass@localhost:5432/contacts",
+});
+
+// --- Firebase Admin ---
+if (!admin.apps.length) {
+  admin.initializeApp({
+    projectId: process.env.FIREBASE_PROJECT_ID || "learn-oauth-25",
+  });
+}
+
+// --- Auth Middleware ---
+async function authMiddleware(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    const token = header.split("Bearer ")[1];
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.userId = decoded.uid;
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid token" });
+  }
+}
 
 // CORS — allow frontend on localhost
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
@@ -17,7 +45,7 @@ app.use((req, res, next) => {
   if (origin && origin.match(/^http:\/\/localhost:\d+$/)) {
     res.header("Access-Control-Allow-Origin", origin);
   }
-  res.header("Access-Control-Allow-Headers", "Content-Type");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
@@ -36,6 +64,13 @@ const swaggerSpec = swaggerJsdoc({
       description: "REST API for managing contacts",
     },
     components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
       schemas: {
         Contact: {
           type: "object",
@@ -97,9 +132,9 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
  *       503:
  *         description: Service unhealthy
  */
-app.get("/healthz", (req, res) => {
+app.get("/healthz", async (req, res) => {
   try {
-    readDb();
+    await pool.query("SELECT 1");
     res.json({ status: "ok" });
   } catch {
     res.status(503).json({ status: "error" });
@@ -128,24 +163,16 @@ const writeLimiter = rateLimit({
 
 app.use(globalLimiter);
 
-// --- Helpers ---
-
-function readDb() {
-  return JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
-}
-
-function writeDb(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-}
-
-// --- Routes ---
+// --- Routes (all protected by authMiddleware) ---
 
 /**
  * @openapi
  * /contacts:
  *   get:
- *     summary: List all contacts
+ *     summary: List all contacts for the authenticated user
  *     tags: [Contacts]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Array of contacts
@@ -155,11 +182,16 @@ function writeDb(data) {
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/Contact'
+ *       401:
+ *         description: Unauthorized
  */
 // GET /contacts
-app.get("/contacts", (req, res) => {
-  const db = readDb();
-  res.json(db.contacts);
+app.get("/contacts", authMiddleware, async (req, res) => {
+  const { rows } = await pool.query(
+    "SELECT id, name, phone FROM contacts WHERE user_id = $1 ORDER BY created_at DESC",
+    [req.userId],
+  );
+  res.json(rows);
 });
 
 /**
@@ -168,6 +200,8 @@ app.get("/contacts", (req, res) => {
  *   get:
  *     summary: Get a contact by ID
  *     tags: [Contacts]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -189,11 +223,14 @@ app.get("/contacts", (req, res) => {
  *               $ref: '#/components/schemas/Error'
  */
 // GET /contacts/:id
-app.get("/contacts/:id", (req, res) => {
-  const db = readDb();
-  const contact = db.contacts.find((c) => String(c.id) === req.params.id);
-  if (!contact) return res.status(404).json({ error: "Contact not found" });
-  res.json(contact);
+app.get("/contacts/:id", authMiddleware, async (req, res) => {
+  const { rows } = await pool.query(
+    "SELECT id, name, phone FROM contacts WHERE id = $1 AND user_id = $2",
+    [req.params.id, req.userId],
+  );
+  if (rows.length === 0)
+    return res.status(404).json({ error: "Contact not found" });
+  res.json(rows[0]);
 });
 
 /**
@@ -202,6 +239,8 @@ app.get("/contacts/:id", (req, res) => {
  *   post:
  *     summary: Create a new contact
  *     tags: [Contacts]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -235,7 +274,7 @@ app.get("/contacts/:id", (req, res) => {
  *         description: Rate limit exceeded
  */
 // POST /contacts (rate-limited)
-app.post("/contacts", writeLimiter, (req, res) => {
+app.post("/contacts", authMiddleware, writeLimiter, async (req, res) => {
   const { name, phone } = req.body;
 
   if (
@@ -247,12 +286,11 @@ app.post("/contacts", writeLimiter, (req, res) => {
     return res.status(400).json({ error: "Name and phone are required" });
   }
 
-  const db = readDb();
-  const id = crypto.randomUUID();
-  const contact = { id, name, phone };
-  db.contacts.push(contact);
-  writeDb(db);
-  res.status(201).json(contact);
+  const { rows } = await pool.query(
+    "INSERT INTO contacts (user_id, name, phone) VALUES ($1, $2, $3) RETURNING id, name, phone",
+    [req.userId, name, phone],
+  );
+  res.status(201).json(rows[0]);
 });
 
 /**
@@ -261,6 +299,8 @@ app.post("/contacts", writeLimiter, (req, res) => {
  *   delete:
  *     summary: Delete a contact
  *     tags: [Contacts]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -280,12 +320,13 @@ app.post("/contacts", writeLimiter, (req, res) => {
  *         description: Rate limit exceeded
  */
 // DELETE /contacts/:id (rate-limited)
-app.delete("/contacts/:id", writeLimiter, (req, res) => {
-  const db = readDb();
-  const index = db.contacts.findIndex((c) => String(c.id) === req.params.id);
-  if (index === -1) return res.status(404).json({ error: "Contact not found" });
-  db.contacts.splice(index, 1);
-  writeDb(db);
+app.delete("/contacts/:id", authMiddleware, writeLimiter, async (req, res) => {
+  const { rowCount } = await pool.query(
+    "DELETE FROM contacts WHERE id = $1 AND user_id = $2",
+    [req.params.id, req.userId],
+  );
+  if (rowCount === 0)
+    return res.status(404).json({ error: "Contact not found" });
   res.json({});
 });
 
@@ -295,7 +336,9 @@ if (require.main === module) {
     console.log(
       `Rate limits: 100 req/15min (global), 10 writes/min (POST/DELETE)`,
     );
+    console.log(`Database: PostgreSQL`);
+    console.log(`Auth: Firebase Admin SDK`);
   });
 }
 
-module.exports = app;
+module.exports = { app, pool };

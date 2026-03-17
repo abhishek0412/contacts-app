@@ -2,12 +2,13 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import {
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
   linkWithPopup,
   GithubAuthProvider,
   GoogleAuthProvider,
   signOut,
 } from "firebase/auth";
-import { auth } from "../firebase";
+import { auth, isFirebaseConfigured } from "../firebase";
 import { trackLogin, trackLogout } from "../analytics";
 
 const AuthContext = createContext();
@@ -22,6 +23,11 @@ export const AuthProvider = ({ children }) => {
   const [pendingCred, setPendingCred] = useState(null);
 
   useEffect(() => {
+    if (!auth) {
+      setLoading(false);
+      return () => {};
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
@@ -29,7 +35,32 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, []);
 
+  const requireFirebaseConfig = () => {
+    if (isFirebaseConfigured && auth) return;
+    throw new Error(
+      "Firebase authentication is not configured. Set REACT_APP_FIREBASE_* variables and rebuild the frontend image.",
+    );
+  };
+
   const handleAuthError = (error, providerName) => {
+    if (error.code === "auth/popup-blocked") {
+      throw new Error(
+        "Login popup was blocked by the browser. Allow popups for this site and try again.",
+      );
+    }
+
+    if (error.code === "auth/unauthorized-domain") {
+      throw new Error(
+        "This domain is not authorized for Firebase Auth. Add localhost in Firebase Console -> Authentication -> Settings -> Authorized domains.",
+      );
+    }
+
+    if (error.code === "auth/operation-not-allowed") {
+      throw new Error(
+        `The ${providerName} provider is disabled in Firebase Auth. Enable it in Firebase Console -> Authentication -> Sign-in method.`,
+      );
+    }
+
     if (error.code === "auth/account-exists-with-different-credential") {
       const credential =
         providerName === "github"
@@ -44,9 +75,24 @@ export const AuthProvider = ({ children }) => {
     throw error;
   };
 
+  const signInWithProvider = (provider, providerName) =>
+    signInWithPopup(auth, provider).catch((error) => {
+      if (
+        error.code === "auth/popup-blocked" ||
+        error.code === "auth/cancelled-popup-request" ||
+        error.code === "auth/operation-not-supported-in-this-environment"
+      ) {
+        return signInWithRedirect(auth, provider).then(() => null);
+      }
+      return Promise.reject(error);
+    });
+
   const loginWithGithub = () =>
-    signInWithPopup(auth, githubProvider)
+    Promise.resolve()
+      .then(() => requireFirebaseConfig())
+      .then(() => signInWithProvider(githubProvider, "github"))
       .then((result) => {
+        if (!result) return result;
         trackLogin("github");
         if (pendingCred) {
           return linkWithPopup(
@@ -64,8 +110,11 @@ export const AuthProvider = ({ children }) => {
       .catch((error) => handleAuthError(error, "github"));
 
   const loginWithGoogle = () =>
-    signInWithPopup(auth, googleProvider)
+    Promise.resolve()
+      .then(() => requireFirebaseConfig())
+      .then(() => signInWithProvider(googleProvider, "google"))
       .then((result) => {
+        if (!result) return result;
         trackLogin("google");
         if (pendingCred) {
           return linkWithPopup(
@@ -82,7 +131,10 @@ export const AuthProvider = ({ children }) => {
       })
       .catch((error) => handleAuthError(error, "google"));
 
-  const logout = () => signOut(auth).then(() => trackLogout());
+  const logout = () => {
+    if (!auth) return Promise.resolve();
+    return signOut(auth).then(() => trackLogout());
+  };
 
   return (
     <AuthContext.Provider

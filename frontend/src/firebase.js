@@ -12,7 +12,28 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const analytics = getAnalytics(app);
+const requiredFirebaseKeys = [
+  "apiKey",
+  "authDomain",
+  "projectId",
+  "appId",
+];
+
+const missingFirebaseKeys = requiredFirebaseKeys.filter(
+  (key) => !firebaseConfig[key],
+);
+
+export const isFirebaseConfigured = missingFirebaseKeys.length === 0;
+
+if (!isFirebaseConfigured) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "Firebase is not configured. Missing env vars:",
+    missingFirebaseKeys.map((key) => `REACT_APP_FIREBASE_${key.toUpperCase()}`),
+  );
+}
+
+const app = isFirebaseConfigured ? initializeApp(firebaseConfig) : null;
+export const auth = app ? getAuth(app) : null;
+export const analytics = app ? getAnalytics(app) : null;
 export default app;

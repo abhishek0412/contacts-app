@@ -1,43 +1,48 @@
 import { logEvent } from "firebase/analytics";
 import { analytics } from "./firebase";
 
-// Auth events
-export const trackLogin = (method) => logEvent(analytics, "login", { method });
+const safeLogEvent = (eventName, params = {}) => {
+  if (!analytics) return;
+  logEvent(analytics, eventName, params);
+};
 
-export const trackLogout = () => logEvent(analytics, "logout");
+// Auth events
+export const trackLogin = (method) => safeLogEvent("login", { method });
+
+export const trackLogout = () => safeLogEvent("logout");
 
 export const trackLoginError = (method, errorMessage) =>
-  logEvent(analytics, "login_error", { method, error_message: errorMessage });
+  safeLogEvent("login_error", { method, error_message: errorMessage });
 
 // Page view (SPA navigation)
 export const trackPageView = (pagePath, pageTitle) =>
-  logEvent(analytics, "page_view", {
+  safeLogEvent("page_view", {
     page_path: pagePath,
     page_title: pageTitle,
   });
 
 // Contact CRUD events
-export const trackContactAdded = () => logEvent(analytics, "contact_added");
+export const trackContactAdded = () => safeLogEvent("contact_added");
 
-export const trackContactDeleted = () => logEvent(analytics, "contact_deleted");
+export const trackContactDeleted = () => safeLogEvent("contact_deleted");
 
 export const trackContactViewed = (contactId) =>
-  logEvent(analytics, "contact_viewed", { contact_id: contactId });
+  safeLogEvent("contact_viewed", { contact_id: contactId });
 
 // Search
 export const trackSearch = (searchTerm) =>
-  logEvent(analytics, "search", { search_term: searchTerm });
+  safeLogEvent("search", { search_term: searchTerm });
 
 // Pagination
 export const trackPageChange = (pageNumber, totalPages) =>
-  logEvent(analytics, "page_change", {
+  safeLogEvent("page_change", {
     page_number: pageNumber,
     total_pages: totalPages,
   });
 
 // Delete dialog
 export const trackDeleteConfirmed = () =>
-  logEvent(analytics, "delete_confirmed");
+  safeLogEvent("delete_confirmed");
 
 export const trackDeleteCancelled = () =>
-  logEvent(analytics, "delete_cancelled");
+  safeLogEvent("delete_cancelled");

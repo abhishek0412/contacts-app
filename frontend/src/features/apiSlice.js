@@ -1,10 +1,19 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { showNotification } from "./notificationSlice";
+import { auth } from "../firebase";
 
 export const contactsApi = createApi({
   reducerPath: "contactsApi",
   baseQuery: fetchBaseQuery({
     baseUrl: process.env.REACT_APP_API_URL || "http://localhost:3001",
+    prepareHeaders: async (headers) => {
+      const user = auth.currentUser;
+      if (user) {
+        const token = await user.getIdToken();
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+      return headers;
+    },
   }),
   tagTypes: ["Contact"],
   endpoints: (builder) => ({

@@ -1,215 +1,143 @@
 # Contact Manager
 
-A modern React contact management application with a clean glassmorphism UI.
+Contact Manager is a full-stack contacts app with Firebase OAuth on the frontend and a token-protected Express API backed by PostgreSQL.
 
-## Features
+## What It Does
 
-- **CRUD Operations** — Add, view, and delete contacts
-- **Search & Filter** — Real-time search by name or phone number
-- **Client-side Pagination** — 10 contacts per page with Prev/Next navigation
-- **Notifications** — Toast notifications for add/delete actions (auto-dismiss + manual close)
-- **Confirmation Dialogs** — Delete confirmation modal to prevent accidental deletions
-- **Form Validation** — Zod schema validation with React Hook Form (inline error messages)
-- **Contact Detail View** — Full-page view with avatar and contact info
+- Sign in with Google or GitHub via Firebase Authentication
+- Store and manage contacts per authenticated user
+- Search, paginate, add, view, and delete contacts
+- Show inline validation and UI notifications
+- Expose API docs at /api-docs and health at /healthz
 
-## Tech Stack
+## Stack
 
-- **React** — Functional components with hooks
-- **Redux Toolkit** — Centralized state management with slices and async thunks
-- **React Router** — Client-side routing (`/`, `/add`, `/contacts/:id`)
-- **React Hook Form + Zod** — Schema-based form validation
-- **Axios** — HTTP client for API calls
-- **json-server** — Mock REST API
+- Frontend: React, Redux Toolkit, RTK Query, React Router, Firebase Web SDK, Zod
+- Backend: Node.js, Express, PostgreSQL, Firebase Admin SDK, Swagger
+- Runtime: Nginx (SPA + proxy), Docker Compose
+- Testing: Jest, Supertest, Playwright
 
-## Architecture
+## Quick Start (Recommended)
 
-- **Lazy Loading** — Route components loaded on demand via `React.lazy` + `Suspense`
-- **Error Boundaries** — Graceful error handling with fallback UI
-- **Custom Hooks** — Shared utilities (`getInitials`)
-- **Barrel Exports** — Clean imports via `index.js` files
-- **Environment Variables** — API URL configured via `.env`
-- **No Prop Drilling** — Components read from Redux store directly via `useSelector`
+1. Create root environment file next to docker-compose.yml:
 
-## Project Structure
-
-```
-frontend/
-├── public/
-├── src/
-│   ├── api/
-│   │   └── contacts.js          # API service layer (fetchAll, create, remove, etc.)
-│   ├── app/
-│   │   └── store.js             # Redux store configuration
-│   ├── components/
-│   │   ├── ui/
-│   │   │   ├── ConfirmDialog.js # Delete confirmation modal
-│   │   │   ├── Notification.js  # Toast notification component
-│   │   │   └── ErrorBoundary.js # Error boundary wrapper
-│   │   ├── Header.js            # Navigation header with badge
-│   │   └── ContactCard.js       # Contact display card
-│   ├── features/
-│   │   ├── contactsSlice.js     # Contacts state, thunks, reducers
-│   │   └── notificationSlice.js # Notification state management
-│   ├── hooks/
-│   │   └── useContactHelpers.js # Shared utility functions
-│   ├── pages/
-│   │   ├── ContactList.js       # Paginated contact list with search
-│   │   ├── ContactDetail.js     # Contact detail page
-│   │   └── AddContacts.js       # Add contact form with Zod validation
-│   ├── App.js                   # Root component with routes
-│   ├── App.css                  # Global styles
-│   └── index.js                 # Entry point (Provider + BrowserRouter)
-server-api/
-├── db.json                      # Mock database (100 contacts)
-└── package.json
+```env
+REACT_APP_FIREBASE_API_KEY=your_api_key
+REACT_APP_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+REACT_APP_FIREBASE_PROJECT_ID=your_project_id
+REACT_APP_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+REACT_APP_FIREBASE_APP_ID=your_app_id
+REACT_APP_FIREBASE_MEASUREMENT_ID=your_measurement_id
 ```
 
-## Getting Started
+2. Build and run:
+
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+3. Open:
+
+- Frontend: http://localhost:3000
+- API: http://localhost:3001
+- Swagger: http://localhost:3001/api-docs
+
+> [!NOTE]
+> Firebase values are baked into the frontend build. If you change REACT_APP_FIREBASE_* values, rebuild frontend:
+>
+> docker compose build frontend
+>
+> docker compose up -d --force-recreate frontend
+
+## Local Development (Without Docker)
 
 ### Prerequisites
 
-- Node.js (v16+)
+- Node.js 20+
+- PostgreSQL 17 (or compatible)
 
-### Installation
+### Install
 
 ```bash
-# Install frontend dependencies
-cd frontend
-npm install
-
-# Install server dependencies
-cd ../server-api
-npm install
+cd frontend && npm install
+cd ../server-api && npm install
+cd .. && npm install
 ```
 
-### Running the App
+### Frontend Environment
 
-Start both servers:
+Create frontend/.env:
+
+```env
+REACT_APP_API_URL=http://localhost:3001
+REACT_APP_FIREBASE_API_KEY=your_api_key
+REACT_APP_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+REACT_APP_FIREBASE_PROJECT_ID=your_project_id
+REACT_APP_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+REACT_APP_FIREBASE_APP_ID=your_app_id
+REACT_APP_FIREBASE_MEASUREMENT_ID=your_measurement_id
+```
+
+### API Environment (Optional Overrides)
+
+```env
+PORT=3001
+DATABASE_URL=postgresql://contacts_user:contacts_pass@localhost:5432/contacts
+FIREBASE_PROJECT_ID=your_firebase_project_id
+CORS_ORIGIN=http://localhost:3000
+```
+
+### Run
 
 ```bash
-# Terminal 1 — Start the API server
+# terminal 1
 cd server-api
 npm start
-# Runs on http://localhost:3001
 
-# Terminal 2 — Start the frontend
+# terminal 2
 cd frontend
 npm start
-# Runs on http://localhost:3000
 ```
 
-### Environment Variables
+## Key Folders
 
-Create a `.env` file in the `frontend/` directory:
+```text
+frontend/
+    src/
+        contexts/AuthContext.js
+        features/apiSlice.js
+        pages/Login.js
+    nginx.conf
+    Dockerfile
 
-```
-REACT_APP_API_URL=http://localhost:3001
-```
+server-api/
+    db/init.sql
+    server.js
+    Dockerfile
 
-## Deployment Architecture
+e2e/
+    *.spec.js
+    pages/
 
-```mermaid
-graph TB
-    subgraph "Developer"
-        DEV[Developer Workstation]
-    end
-
-    subgraph "Azure DevOps"
-        direction TB
-        subgraph "CI Pipeline — contacts-app-ci"
-            direction LR
-            SCAN[Scan<br/><small>Gitleaks · Hadolint<br/>Checkov · BicepLint<br/>npm audit</small>]
-            TEST[Test<br/><small>Jest API · Jest Frontend</small>]
-            E2E[E2E<br/><small>Playwright</small>]
-            BUILD[Build<br/><small>Docker build · Trivy<br/>Tar artifacts</small>]
-            SCAN --> TEST --> E2E --> BUILD
-        end
-
-        subgraph "CD Pipeline — contacts-app-cd"
-            direction LR
-            PUSH[Push<br/><small>Bootstrap ACR<br/>Tag & push images</small>]
-            DEPLOY[Deploy<br/><small>Bicep IaC<br/>Smoke tests</small>]
-            PUSH --> DEPLOY
-        end
-
-        ART[(Pipeline<br/>Artifacts<br/><small>.tar files</small>)]
-        BUILD -.-> ART -.-> PUSH
-    end
-
-    subgraph "Azure — eastus2"
-        subgraph "rg-contacts-dev"
-            ACR[Azure Container<br/>Registry<br/><small>Basic SKU</small>]
-
-            LOG[Log Analytics<br/>Workspace]
-
-            subgraph "Container Apps Environment"
-                direction TB
-
-                subgraph "Frontend App — external"
-                    FE_ENVOY[Envoy Sidecar<br/><small>HTTPS termination</small>]
-                    FE_NGINX[Nginx :80<br/><small>SPA + reverse proxy<br/>Security headers</small>]
-                    FE_ENVOY --> FE_NGINX
-                end
-
-                subgraph "API App — internal"
-                    API_ENVOY[Envoy Sidecar<br/><small>HTTPS termination</small>]
-                    API_NODE[Node.js :3001<br/><small>Express + json-server<br/>Rate limiting</small>]
-                    API_ENVOY --> API_NODE
-                end
-
-                FE_NGINX -- "proxy_pass<br/>HTTPS + SNI" --> API_ENVOY
-            end
-
-            ACR -.-> |pull images| FE_NGINX
-            ACR -.-> |pull images| API_NODE
-            LOG -.-> |collect logs| FE_NGINX
-            LOG -.-> |collect logs| API_NODE
-        end
-    end
-
-    DEV -- "git push" --> SCAN
-    DEPLOY -- "Bicep<br/>subscription deploy" --> ACR
-
-    USERS((Users)) -- "HTTPS" --> FE_ENVOY
-
-    classDef azure fill:#0078d4,color:#fff,stroke:#005a9e
-    classDef pipeline fill:#f59e0b,color:#000,stroke:#d97706
-    classDef container fill:#10b981,color:#fff,stroke:#059669
-    classDef user fill:#8b5cf6,color:#fff,stroke:#7c3aed
-
-    class ACR,LOG azure
-    class SCAN,TEST,E2E,BUILD,PUSH,DEPLOY pipeline
-    class FE_ENVOY,FE_NGINX,API_ENVOY,API_NODE container
-    class USERS,DEV user
+docker-compose.yml
 ```
 
-### Pipeline Flow
+## Troubleshooting
 
-| Pipeline | Stages                    | Purpose                                                                     |
-| -------- | ------------------------- | --------------------------------------------------------------------------- |
-| **CI**   | Scan → Test → E2E → Build | Security scans, unit/integration/E2E tests, Docker image build + Trivy scan |
-| **CD**   | Push → Deploy             | Provision ACR, push images, deploy via Bicep, smoke tests                   |
+- Frontend login says Firebase authentication is not configured:
+    Set root REACT_APP_FIREBASE_* values and rebuild frontend image.
+- Frontend container shows entrypoint not found:
+    Rebuild frontend image to refresh line ending normalization.
+- OAuth popup blocked/cancelled:
+    The app falls back to redirect flow; allow popups for localhost if your browser blocks them.
+- Browser CSP errors during auth:
+    Rebuild frontend so latest nginx.conf is used.
 
-### Azure Resources
+## CI/CD and Infra
 
-| Resource           | SKU                | Details                                              |
-| ------------------ | ------------------ | ---------------------------------------------------- |
-| Resource Group     | —                  | `rg-contacts-dev` in `eastus2`                       |
-| Container Registry | Basic              | Admin credentials, public access                     |
-| Log Analytics      | PerGB2018          | 30-day retention                                     |
-| Container Apps Env | —                  | Zone redundancy off (free tier)                      |
-| API App            | 0.25 vCPU / 0.5 Gi | Internal ingress, min 1 replica, `/healthz` probes   |
-| Frontend App       | 0.25 vCPU / 0.5 Gi | External ingress, scale-to-zero, Nginx reverse proxy |
-
-### Infrastructure as Code
-
-All infrastructure is defined in **Bicep** with subscription-level deployments:
-
-```
-pipelines/infra/
-├── bootstrap.bicep          # RG + ACR (pre-push provisioning)
-├── main.bicep               # Subscription-level orchestrator
-└── modules/
-    ├── acr.bicep             # ACR module
-    └── resources.bicep       # ACR + Log Analytics + ACA Env + Apps
-```
+- CI/CD pipelines: azure-pipelines.yml and pipelines/
+- Infra templates: pipelines/infra (Bicep)
+- Deployment architecture and security docs: ARCHITECTURE.md and THREAT-MODEL.md
