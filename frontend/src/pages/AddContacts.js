@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAddContactMutation } from "../features/apiSlice";
+import { trackContactAdded } from "../analytics";
 
 const contactSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -26,6 +27,7 @@ const AddContacts = () => {
 
   const onSubmit = async (data) => {
     await addContact(data);
+    trackContactAdded();
     navigate("/");
   };
 

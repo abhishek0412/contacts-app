@@ -3,11 +3,16 @@ import { useParams, Link } from "react-router-dom";
 import { useGetContactsQuery } from "../features/apiSlice";
 import { getInitials } from "../hooks/useContactHelpers";
 import { ContactDetailSkeleton } from "../components/ui/Skeleton";
+import { trackContactViewed } from "../analytics";
 
 const ContactDetail = () => {
   const { id } = useParams();
   const { data: contacts = [], isLoading } = useGetContactsQuery();
   const contact = contacts.find((c) => String(c.id) === id);
+
+  React.useEffect(() => {
+    if (contact) trackContactViewed(id);
+  }, [id, contact]);
 
   if (isLoading) {
     return <ContactDetailSkeleton />;

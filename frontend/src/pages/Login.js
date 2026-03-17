@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { trackLoginError } from "../analytics";
 
 const Login = () => {
   const { loginWithGithub, loginWithGoogle } = useAuth();
@@ -13,6 +14,8 @@ const Login = () => {
       await providerFn();
       navigate("/");
     } catch (err) {
+      const method = providerFn === loginWithGithub ? "github" : "google";
+      trackLoginError(method, err.message);
       setError(err.message);
     }
   };
@@ -39,9 +42,7 @@ const Login = () => {
             </svg>
           </div>
           <h1>Contact Manager</h1>
-          <p className="login-subtitle">
-            Sign in to manage your contacts
-          </p>
+          <p className="login-subtitle">Sign in to manage your contacts</p>
         </div>
 
         <div className="login-divider">
@@ -70,12 +71,7 @@ const Login = () => {
             className="login-btn login-btn-google"
             onClick={() => handleLogin(loginWithGoogle)}
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
+            <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
                 fill="#4285F4"

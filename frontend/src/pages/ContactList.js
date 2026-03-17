@@ -7,6 +7,13 @@ import {
 import { getInitials } from "../hooks/useContactHelpers";
 import ConfirmDialog from "../components/ui/ConfirmDialog";
 import { ContactListSkeleton } from "../components/ui/Skeleton";
+import {
+  trackSearch,
+  trackContactDeleted,
+  trackDeleteConfirmed,
+  trackDeleteCancelled,
+  trackPageChange,
+} from "../analytics";
 
 const CONTACTS_PER_PAGE = 5;
 
@@ -34,13 +41,17 @@ const ContactList = () => {
 
   // Reset to page 1 when search changes
   const handleSearch = (e) => {
-    setSearchTerm(e.target.value);
+    const value = e.target.value;
+    setSearchTerm(value);
     setCurrentPage(1);
+    if (value.length >= 2) trackSearch(value);
   };
 
   const handleDelete = () => {
     if (deleteId !== null) {
       deleteContact(deleteId);
+      trackContactDeleted();
+      trackDeleteConfirmed();
       setDeleteId(null);
     }
   };
@@ -115,7 +126,10 @@ const ContactList = () => {
               <button
                 className="page-btn"
                 disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
+                onClick={() => {
+                  setCurrentPage((p) => p - 1);
+                  trackPageChange(currentPage - 1, totalPages);
+                }}
                 aria-label="Previous page"
               >
                 &laquo; Prev
@@ -126,7 +140,10 @@ const ContactList = () => {
               <button
                 className="page-btn"
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
+                onClick={() => {
+                  setCurrentPage((p) => p + 1);
+                  trackPageChange(currentPage + 1, totalPages);
+                }}
                 aria-label="Next page"
               >
                 Next &raquo;
@@ -139,7 +156,10 @@ const ContactList = () => {
         <ConfirmDialog
           message="Are you sure you want to delete this contact?"
           onConfirm={handleDelete}
-          onCancel={() => setDeleteId(null)}
+          onCancel={() => {
+            trackDeleteCancelled();
+            setDeleteId(null);
+          }}
         />
       )}
     </div>

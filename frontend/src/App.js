@@ -1,7 +1,8 @@
 import "./App.css";
-import React, { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import React, { lazy, Suspense, useEffect } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
+import { trackPageView } from "./analytics";
 import Header from "./components/Header.js";
 import Notification from "./components/ui/Notification.js";
 import ErrorBoundary from "./components/ui/ErrorBoundary.js";
@@ -19,6 +20,11 @@ function ProtectedRoute({ children }) {
 
 function App() {
   const { user, loading } = useAuth();
+  const location = useLocation();
+
+  useEffect(() => {
+    trackPageView(location.pathname, document.title);
+  }, [location]);
 
   if (loading) {
     return (
