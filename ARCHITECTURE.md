@@ -1,246 +1,174 @@
-# Contact Manager — Architecture Diagrams
+# Contact Manager Architecture
 
-## 1. System Architecture
+Last updated: March 17, 2026
 
-High-level view: Browser → React Frontend → json-server API → db.json
+## 1. System Overview
+
+Contact Manager is a full-stack web application with:
+
+- React SPA frontend served by Nginx
+- Firebase Authentication (Google and GitHub OAuth)
+- Express API protected by Firebase Admin token verification
+- PostgreSQL persistence (per-user contact isolation)
+- Docker Compose local orchestration
+
+Primary local endpoints:
+
+- Frontend: http://localhost:3000
+- API: http://localhost:3001
+- API docs: http://localhost:3001/api-docs
+- Postgres: localhost:5432
+
+## 2. High-Level Architecture
 
 ```mermaid
 graph LR
-    subgraph Client["🖥️ Browser (localhost:3000)"]
-        direction TB
-        UI["React App<br/>(CRA)"]
-        RTK["Redux Store<br/>+ RTK Query Cache"]
-        Router["React Router v7<br/>Client-side Routing"]
-    end
+    U[User Browser]
+    FE[Nginx + React SPA]
+    FID[Firebase Auth]
+    API[Express API]
+    PG[(PostgreSQL)]
 
-    subgraph Server["⚙️ API Server (localhost:3001)"]
-        JS["json-server v1<br/>REST API"]
-    end
-
-    subgraph Storage["💾 File System"]
-        DB["db.json<br/>100 Contacts"]
-    end
-
-    UI --> RTK
-    RTK -->|"GET /contacts<br/>POST /contacts<br/>DELETE /contacts/:id"| JS
-    JS --> DB
-    JS -->|"JSON Response"| RTK
-    RTK -->|"Cached Data"| UI
-    UI --> Router
-
-    style Client fill:#1a1a2e,stroke:#e94560,color:#fff
-    style Server fill:#16213e,stroke:#0f3460,color:#fff
-    style Storage fill:#0f3460,stroke:#533483,color:#fff
-    style UI fill:#e94560,stroke:#fff,color:#fff
-    style RTK fill:#533483,stroke:#fff,color:#fff
-    style Router fill:#0f3460,stroke:#fff,color:#fff
-    style JS fill:#0f3460,stroke:#e94560,color:#fff
-    style DB fill:#533483,stroke:#e94560,color:#fff
+    U -->|HTTPS or HTTP in local| FE
+    FE -->|OAuth popup or redirect| FID
+    FE -->|Bearer token in Authorization| API
+    API -->|verifyIdToken| FID
+    API -->|SQL queries| PG
 ```
 
----
+## 3. Runtime Components
 
-## 2. Component Hierarchy
+### Frontend container
 
-React component tree: App → Header, Notification, Routes → Pages
+- Source: frontend/
+- Build: multi-stage Docker build (Node build stage + Nginx runtime)
+- Responsibilities:
+  - Serve static SPA assets
+  - Route all non-file paths to index.html
+  - Reverse proxy /api/\* to backend service
+  - Emit security headers (CSP, frame protections, referrer policy, etc.)
 
-```mermaid
-graph TD
-    Index["index.js<br/>Provider + BrowserRouter"]
-    App["App.js<br/>Root Component"]
+### API container
 
-    Header["Header.js<br/>NavLinks + Badge"]
-    Notif["Notification.js<br/>Toast (auto-dismiss)"]
-    EB["ErrorBoundary.js<br/>Error Fallback"]
-    Suspense["Suspense<br/>Lazy Loading"]
+- Source: server-api/
+- Runtime: Node.js + Express
+- Responsibilities:
+  - Validate Firebase ID tokens
+  - Enforce user-level data scoping on all contact routes
+  - Validate request payload basics for write operations
+  - Expose Swagger docs and health endpoint
+  - Enforce global and write-specific rate limits
 
-    CL["ContactList.js<br/>/ route"]
-    AC["AddContacts.js<br/>/add route"]
-    CD["ContactDetail.js<br/>/contacts/:id route"]
+### Database container
 
-    Confirm["ConfirmDialog.js<br/>Delete Modal"]
-    CC["ContactCard.js<br/>Display Card"]
+- Engine: PostgreSQL 17 (alpine)
+- Schema bootstrap: server-api/db/init.sql
+- Contacts table stores user_id, name, phone, created_at
 
-    Index --> App
-    App --> Header
-    App --> Notif
-    App --> EB
-    EB --> Suspense
-    Suspense --> CL
-    Suspense --> AC
-    Suspense --> CD
-    CL --> Confirm
-    CD --> CC
+## 4. Frontend Architecture
 
-    style Index fill:#2d3436,stroke:#00b894,color:#fff
-    style App fill:#e17055,stroke:#fff,color:#fff
-    style Header fill:#0984e3,stroke:#fff,color:#fff
-    style Notif fill:#0984e3,stroke:#fff,color:#fff
-    style EB fill:#0984e3,stroke:#fff,color:#fff
-    style Suspense fill:#6c5ce7,stroke:#fff,color:#fff
-    style CL fill:#00b894,stroke:#fff,color:#fff
-    style AC fill:#00b894,stroke:#fff,color:#fff
-    style CD fill:#00b894,stroke:#fff,color:#fff
-    style Confirm fill:#fdcb6e,stroke:#2d3436,color:#2d3436
-    style CC fill:#fdcb6e,stroke:#2d3436,color:#2d3436
-```
+Key modules:
 
----
+- Auth context: frontend/src/contexts/AuthContext.js
+  - Handles OAuth login/logout
+  - Falls back popup login to redirect when popup fails
+  - Converts common Firebase auth errors to user-friendly messages
+- Firebase bootstrap: frontend/src/firebase.js
+  - Reads REACT*APP_FIREBASE*\* config
+  - Guards against missing config
+- API data layer: frontend/src/features/apiSlice.js
+  - RTK Query base query
+  - Injects Firebase ID token in Authorization header when present
+- Routing: frontend/src/App.js
+  - Protected routes for contacts pages
+  - Public login route
 
-## 3. RTK Query Data Flow
+## 5. API Architecture
 
-How data flows through the Redux store, RTK Query cache, and API
+Core endpoints:
 
-```mermaid
-sequenceDiagram
-    participant C as React Component
-    participant H as RTK Query Hook
-    participant Cache as RTK Query Cache
-    participant MW as API Middleware
-    participant API as json-server
-    participant N as Notification Slice
+- GET /healthz (unauthenticated)
+- GET /api-docs (unauthenticated)
+- GET /contacts (authenticated)
+- GET /contacts/:id (authenticated)
+- POST /contacts (authenticated + write rate limit)
+- DELETE /contacts/:id (authenticated + write rate limit)
 
-    Note over C,API: READ FLOW (useGetContactsQuery)
-    C->>H: useGetContactsQuery()
-    H->>Cache: Check cache
-    alt Cache Hit
-        Cache-->>H: Return cached data
-        H-->>C: { data, isLoading: false }
-    else Cache Miss
-        Cache->>MW: Dispatch query
-        MW->>API: GET /contacts
-        API-->>MW: JSON response
-        MW->>Cache: Store with "Contact" tag
-        Cache-->>H: Return fresh data
-        H-->>C: { data, isLoading: false }
-    end
+Authentication flow:
 
-    Note over C,API: WRITE FLOW (useAddContactMutation)
-    C->>H: addContact({ name, phone })
-    H->>MW: Dispatch mutation
-    MW->>API: POST /contacts
-    API-->>MW: Created contact
-    MW->>N: dispatch(showNotification)
-    MW->>Cache: Invalidate "Contact" tag
-    Cache->>MW: Auto-refetch GET /contacts
-    MW->>API: GET /contacts
-    API-->>MW: Updated list
-    MW->>Cache: Update cache
-    Cache-->>C: Re-render with new data
-```
+1. Frontend obtains Firebase user session
+2. Frontend sends ID token as Bearer token
+3. API verifies token via Firebase Admin SDK
+4. API maps decoded uid to req.userId
+5. SQL queries enforce WHERE user_id = req.userId
 
----
+## 6. Data Model
 
-## 4. Folder Structure
+contacts table:
 
-Visual representation of the project layout
+- id: UUID primary key
+- user_id: string (Firebase uid)
+- name: string
+- phone: string
+- created_at: timestamp default now
 
-```mermaid
-graph TD
-    Root["contacts-app/"]
+Index:
 
-    FE["frontend/"]
-    SRC["src/"]
-    PUB["public/"]
+- idx_contacts_user_id on user_id
 
-    API_DIR["api/"]
-    API_FILE["contacts.js"]
+## 7. Deployment and Delivery
 
-    APP_DIR["app/"]
-    STORE["store.js"]
+Local orchestration:
 
-    COMP["components/"]
-    COMP_UI["ui/"]
-    HEADER["Header.js"]
-    CARD["ContactCard.js"]
-    CONFIRM["ConfirmDialog.js"]
-    NOTIF["Notification.js"]
-    ERRBND["ErrorBoundary.js"]
+- docker-compose.yml defines frontend, api, postgres
+- Health-based startup ordering:
+  - api waits for postgres healthy
+  - frontend waits for api healthy
 
-    FEAT["features/"]
-    API_SLICE["apiSlice.js"]
-    NOTIF_SLICE["notificationSlice.js"]
-    BARREL1["index.js"]
+CI/CD:
 
-    HOOKS["hooks/"]
-    HELPERS["useContactHelpers.js"]
-    BARREL2["index.js"]
+- CI pipeline: pipelines/ci.yml
+  - Scan -> Test -> E2E -> Build
+- CD pipeline: pipelines/cd.yml
+  - Push images -> Deploy region
+- Legacy router pipeline: azure-pipelines.yml
 
-    PAGES["pages/"]
-    CL["ContactList.js"]
-    CD["ContactDetail.js"]
-    AC["AddContacts.js"]
+## 8. Cross-Cutting Concerns
 
-    APP_JS["App.js"]
-    APP_CSS["App.css"]
-    INDEX_JS["index.js"]
+### Security
 
-    SA["server-api/"]
-    DB["db.json"]
-    PKG2["package.json"]
+- Firebase token verification on API
+- User-scoped SQL access control
+- CORS handling for localhost origins
+- Rate limiting:
+  - Global: 100 requests per 15 minutes per IP
+  - Writes: 10 requests per minute per IP
+- Nginx security headers and CSP
 
-    E2E["e2e/"]
-    POM["pages/"]
-    SPECS["*.spec.js"]
+### Reliability
 
-    CONFIG["playwright.config.js"]
-    README["README.md"]
-    GIT[".gitignore"]
-    ENV[".env"]
+- Health checks for all containers
+- Restart policy set to unless-stopped
+- Frontend startup normalizes shell script line endings in image build
 
-    Root --> FE
-    Root --> SA
-    Root --> E2E
-    Root --> CONFIG
-    Root --> README
-    Root --> GIT
+### Observability
 
-    FE --> SRC
-    FE --> PUB
-    FE --> ENV
+- Basic server startup logs
+- No centralized structured logging/tracing yet
 
-    SRC --> API_DIR --> API_FILE
-    SRC --> APP_DIR --> STORE
-    SRC --> COMP
-    COMP --> COMP_UI
-    COMP --> HEADER
-    COMP --> CARD
-    COMP_UI --> CONFIRM
-    COMP_UI --> NOTIF
-    COMP_UI --> ERRBND
+## 9. Key Architectural Decisions
 
-    SRC --> FEAT
-    FEAT --> API_SLICE
-    FEAT --> NOTIF_SLICE
-    FEAT --> BARREL1
+1. Firebase Auth for identity provider and token format consistency
+2. Firebase Admin verification on backend for server-trust boundary
+3. PostgreSQL for persistent multi-user data over file-based storage
+4. RTK Query for cached data fetching and invalidation patterns
+5. Nginx reverse proxy for frontend static hosting + API forwarding
 
-    SRC --> HOOKS
-    HOOKS --> HELPERS
-    HOOKS --> BARREL2
+## 10. Known Gaps and Improvement Targets
 
-    SRC --> PAGES
-    PAGES --> CL
-    PAGES --> CD
-    PAGES --> AC
-
-    SRC --> APP_JS
-    SRC --> APP_CSS
-    SRC --> INDEX_JS
-
-    SA --> DB
-    SA --> PKG2
-
-    E2E --> POM
-    E2E --> SPECS
-
-    style Root fill:#2d3436,stroke:#dfe6e9,color:#fff
-    style FE fill:#0984e3,stroke:#fff,color:#fff
-    style SA fill:#00b894,stroke:#fff,color:#fff
-    style E2E fill:#6c5ce7,stroke:#fff,color:#fff
-    style SRC fill:#74b9ff,stroke:#fff,color:#fff
-    style COMP fill:#fd79a8,stroke:#fff,color:#fff
-    style COMP_UI fill:#e17055,stroke:#fff,color:#fff
-    style FEAT fill:#fdcb6e,stroke:#2d3436,color:#2d3436
-    style HOOKS fill:#55efc4,stroke:#2d3436,color:#2d3436
-    style PAGES fill:#a29bfe,stroke:#fff,color:#fff
-```
+1. Refactor server-api/server.js into layered modules (router/service/repository)
+2. Add structured logging and request correlation IDs
+3. Tighten CORS policy for non-local deployments
+4. Add request schema validation library for stronger payload contracts
+5. Add migration tooling (instead of bootstrap SQL only)
+6. Add TLS-first deployment defaults outside local development
