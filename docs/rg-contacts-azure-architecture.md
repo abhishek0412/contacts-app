@@ -1,4 +1,4 @@
-# Azure Architecture: rg-contacts-{environmentSuffix}
+# Azure Architecture: rg-contacts-envSuffix
 
 **Subscription**: Deployment target from subscription-level Bicep  
 **Region**: Parameterized via location  
@@ -15,32 +15,32 @@ The monitoring path is centralized in Log Analytics, connected through the manag
 
 ## Resource Inventory
 
-| Resource Name                         | Type                                     | Tier/SKU           | Location            | Notes                                                    |
-| ------------------------------------- | ---------------------------------------- | ------------------ | ------------------- | -------------------------------------------------------- |
-| rg-contacts-{environmentSuffix}       | Microsoft.Resources/resourceGroups       | N/A                | parameter: location | Environment resource group created at subscription scope |
-| {acrName}                             | Microsoft.ContainerRegistry/registries   | Basic              | parameter: location | adminUserEnabled true, publicNetworkAccess Enabled       |
-| log-contacts-{environmentSuffix}      | Microsoft.OperationalInsights/workspaces | PerGB2018          | parameter: location | 30-day retention                                         |
-| contacts-env-{environmentSuffix}      | Microsoft.App/managedEnvironments        | N/A                | parameter: location | Connected to Log Analytics for app logs                  |
-| contacts-api-{environmentSuffix}      | Microsoft.App/containerApps              | 0.25 vCPU / 0.5 Gi | parameter: location | Internal ingress on port 3001, minReplicas 1             |
-| contacts-frontend-{environmentSuffix} | Microsoft.App/containerApps              | 0.25 vCPU / 0.5 Gi | parameter: location | External ingress on port 80, minReplicas 0               |
+| Resource Name               | Type                                     | Tier/SKU           | Location            | Notes                                                    |
+| --------------------------- | ---------------------------------------- | ------------------ | ------------------- | -------------------------------------------------------- |
+| rg-contacts-envSuffix       | Microsoft.Resources/resourceGroups       | N/A                | parameter: location | Environment resource group created at subscription scope |
+| acrName                     | Microsoft.ContainerRegistry/registries   | Basic              | parameter: location | adminUserEnabled true, publicNetworkAccess Enabled       |
+| log-contacts-envSuffix      | Microsoft.OperationalInsights/workspaces | PerGB2018          | parameter: location | 30-day retention                                         |
+| contacts-env-envSuffix      | Microsoft.App/managedEnvironments        | N/A                | parameter: location | Connected to Log Analytics for app logs                  |
+| contacts-api-envSuffix      | Microsoft.App/containerApps              | 0.25 vCPU / 0.5 Gi | parameter: location | Internal ingress on port 3001, minReplicas 1             |
+| contacts-frontend-envSuffix | Microsoft.App/containerApps              | 0.25 vCPU / 0.5 Gi | parameter: location | External ingress on port 80, minReplicas 0               |
 
 ## Architecture Diagram
 
 ```mermaid
 graph TB
     subgraph SUB[Subscription]
-        RG[Resource Group<br/>rg-contacts-{environmentSuffix}]
+        RG[Resource Group\nrg-contacts-envSuffix]
     end
 
     subgraph PLATFORM[Platform Resources]
-        ACR[Azure Container Registry<br/>{acrName}<br/>Basic | Admin Enabled]
-        LAW[Log Analytics Workspace<br/>log-contacts-{environmentSuffix}<br/>PerGB2018 | 30d]
-        ENV[Container Apps Environment<br/>contacts-env-{environmentSuffix}]
+        ACR[Azure Container Registry\nacrName\nBasic, Admin Enabled]
+        LAW[Log Analytics Workspace\nlog-contacts-envSuffix\nPerGB2018, 30d]
+        ENV[Container Apps Environment\ncontacts-env-envSuffix]
     end
 
     subgraph APPS[Container Apps]
-        FE[Frontend Container App<br/>contacts-frontend-{environmentSuffix}<br/>External ingress :80]
-        API[API Container App<br/>contacts-api-{environmentSuffix}<br/>Internal ingress :3001]
+        FE[Frontend Container App\ncontacts-frontend-envSuffix\nExternal ingress 80]
+        API[API Container App\ncontacts-api-envSuffix\nInternal ingress 3001]
     end
 
     USERS[Users]
@@ -55,8 +55,8 @@ graph TB
     ENV --> FE
     ENV --> API
 
-    ACR -->|Pull contacts-app-frontend:{frontendImageTag}| FE
-    ACR -->|Pull contacts-app-api:{apiImageTag}| API
+    ACR -->|Pull contacts-app-frontend:frontendImageTag| FE
+    ACR -->|Pull contacts-app-api:apiImageTag| API
 
     FE -->|HTTPS proxy /api| API
     USERS -->|HTTPS| FE
