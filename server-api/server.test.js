@@ -154,10 +154,9 @@ describe("POST /contacts", () => {
       .set("Authorization", TEST_TOKEN)
       .send({ name: "Persist Test", phone: "(555) 111-2222" });
 
-    const { rows } = await pool.query(
-      "SELECT * FROM contacts WHERE id = $1",
-      [res.body.id],
-    );
+    const { rows } = await pool.query("SELECT * FROM contacts WHERE id = $1", [
+      res.body.id,
+    ]);
     expect(rows.length).toBe(1);
     expect(rows[0].name).toBe("Persist Test");
     expect(rows[0].user_id).toBe(TEST_USER_ID);
@@ -248,10 +247,9 @@ describe("DELETE /contacts/:id", () => {
     expect(res.status).toBe(200);
 
     // Verify removed from database
-    const { rows } = await pool.query(
-      "SELECT * FROM contacts WHERE id = $1",
-      [target.id],
-    );
+    const { rows } = await pool.query("SELECT * FROM contacts WHERE id = $1", [
+      target.id,
+    ]);
     expect(rows.length).toBe(0);
   });
 

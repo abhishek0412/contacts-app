@@ -45,7 +45,7 @@ docker compose ps
 - Swagger: http://localhost:3001/api-docs
 
 > [!NOTE]
-> Firebase values are baked into the frontend build. If you change REACT_APP_FIREBASE_* values, rebuild frontend:
+> Firebase values are baked into the frontend build. If you change REACT*APP_FIREBASE*\* values, rebuild frontend:
 >
 > docker compose build frontend
 >
@@ -128,13 +128,13 @@ docker-compose.yml
 ## Troubleshooting
 
 - Frontend login says Firebase authentication is not configured:
-    Set root REACT_APP_FIREBASE_* values and rebuild frontend image.
+  Set root REACT*APP_FIREBASE*\* values and rebuild frontend image.
 - Frontend container shows entrypoint not found:
-    Rebuild frontend image to refresh line ending normalization.
+  Rebuild frontend image to refresh line ending normalization.
 - OAuth popup blocked/cancelled:
-    The app falls back to redirect flow; allow popups for localhost if your browser blocks them.
+  The app falls back to redirect flow; allow popups for localhost if your browser blocks them.
 - Browser CSP errors during auth:
-    Rebuild frontend so latest nginx.conf is used.
+  Rebuild frontend so latest nginx.conf is used.
 
 ## CI/CD and Infra
 

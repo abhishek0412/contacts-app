@@ -12,12 +12,7 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
-const requiredFirebaseKeys = [
-  "apiKey",
-  "authDomain",
-  "projectId",
-  "appId",
-];
+const requiredFirebaseKeys = ["apiKey", "authDomain", "projectId", "appId"];
 
 const missingFirebaseKeys = requiredFirebaseKeys.filter(
   (key) => !firebaseConfig[key],

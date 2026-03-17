@@ -41,8 +41,6 @@ export const trackPageChange = (pageNumber, totalPages) =>
   });
 
 // Delete dialog
-export const trackDeleteConfirmed = () =>
-  safeLogEvent("delete_confirmed");
+export const trackDeleteConfirmed = () => safeLogEvent("delete_confirmed");
 
-export const trackDeleteCancelled = () =>
-  safeLogEvent("delete_cancelled");
+export const trackDeleteCancelled = () => safeLogEvent("delete_cancelled");
