@@ -15,14 +15,14 @@ The monitoring path is centralized in Log Analytics, connected through the manag
 
 ## Resource Inventory
 
-| Resource Name | Type | Tier/SKU | Location | Notes |
-|--------------|------|----------|----------|-------|
-| rg-contacts-{environmentSuffix} | Microsoft.Resources/resourceGroups | N/A | parameter: location | Environment resource group created at subscription scope |
-| {acrName} | Microsoft.ContainerRegistry/registries | Basic | parameter: location | adminUserEnabled true, publicNetworkAccess Enabled |
-| log-contacts-{environmentSuffix} | Microsoft.OperationalInsights/workspaces | PerGB2018 | parameter: location | 30-day retention |
-| contacts-env-{environmentSuffix} | Microsoft.App/managedEnvironments | N/A | parameter: location | Connected to Log Analytics for app logs |
-| contacts-api-{environmentSuffix} | Microsoft.App/containerApps | 0.25 vCPU / 0.5 Gi | parameter: location | Internal ingress on port 3001, minReplicas 1 |
-| contacts-frontend-{environmentSuffix} | Microsoft.App/containerApps | 0.25 vCPU / 0.5 Gi | parameter: location | External ingress on port 80, minReplicas 0 |
+| Resource Name                         | Type                                     | Tier/SKU           | Location            | Notes                                                    |
+| ------------------------------------- | ---------------------------------------- | ------------------ | ------------------- | -------------------------------------------------------- |
+| rg-contacts-{environmentSuffix}       | Microsoft.Resources/resourceGroups       | N/A                | parameter: location | Environment resource group created at subscription scope |
+| {acrName}                             | Microsoft.ContainerRegistry/registries   | Basic              | parameter: location | adminUserEnabled true, publicNetworkAccess Enabled       |
+| log-contacts-{environmentSuffix}      | Microsoft.OperationalInsights/workspaces | PerGB2018          | parameter: location | 30-day retention                                         |
+| contacts-env-{environmentSuffix}      | Microsoft.App/managedEnvironments        | N/A                | parameter: location | Connected to Log Analytics for app logs                  |
+| contacts-api-{environmentSuffix}      | Microsoft.App/containerApps              | 0.25 vCPU / 0.5 Gi | parameter: location | Internal ingress on port 3001, minReplicas 1             |
+| contacts-frontend-{environmentSuffix} | Microsoft.App/containerApps              | 0.25 vCPU / 0.5 Gi | parameter: location | External ingress on port 80, minReplicas 0               |
 
 ## Architecture Diagram
 
