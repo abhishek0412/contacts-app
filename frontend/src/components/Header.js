@@ -1,9 +1,11 @@
 import React from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useGetContactsQuery } from "../features/apiSlice";
+import { useAuth } from "../contexts/AuthContext";
 
 const Header = () => {
   const { data: contacts = [] } = useGetContactsQuery();
+  const { user, logout } = useAuth();
 
   return (
     <header className="app-header">
@@ -34,6 +36,11 @@ const Header = () => {
         >
           Add New
         </NavLink>
+        {user && (
+          <button className="nav-link logout-btn" onClick={logout}>
+            Logout
+          </button>
+        )}
       </nav>
     </header>
   );
