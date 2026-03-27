@@ -4,6 +4,11 @@ import {
   signInWithPopup,
   signInWithRedirect,
   linkWithPopup,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  updateProfile,
   GithubAuthProvider,
   GoogleAuthProvider,
   signOut,
@@ -131,6 +136,32 @@ export const AuthProvider = ({ children }) => {
       })
       .catch((error) => handleAuthError(error, "google"));
 
+  const signUp = async (email, password, displayName) => {
+    requireFirebaseConfig();
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(result.user, { displayName });
+    await sendEmailVerification(result.user);
+    trackLogin('email-signup');
+    return result;
+  };
+
+  const signInWithEmail = async (email, password) => {
+    requireFirebaseConfig();
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    if (!result.user.emailVerified) {
+      await sendEmailVerification(result.user);
+      await signOut(auth);
+      throw new Error('Please verify your email before signing in. A new verification link has been sent.');
+    }
+    trackLogin('email');
+    return result;
+  };
+
+  const resetPassword = async (email) => {
+    requireFirebaseConfig();
+    await sendPasswordResetEmail(auth, email);
+  };
+
   const logout = () => {
     if (!auth) return Promise.resolve();
     return signOut(auth).then(() => trackLogout());
@@ -138,7 +169,16 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, loginWithGithub, loginWithGoogle, logout }}
+      value={{
+        user,
+        loading,
+        loginWithGithub,
+        loginWithGoogle,
+        signUp,
+        signInWithEmail,
+        resetPassword,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>
