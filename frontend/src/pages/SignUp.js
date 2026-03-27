@@ -34,7 +34,7 @@ const SignUp = () => {
     const result = signUpSchema.safeParse(form);
     if (!result.success) {
       const fieldErrors = {};
-      result.error.errors.forEach((err) => {
+      result.error.issues.forEach((err) => {
         const field = err.path[0];
         if (!fieldErrors[field]) fieldErrors[field] = err.message;
       });

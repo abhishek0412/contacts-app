@@ -13,6 +13,7 @@ frontend/build/
 
 # testing
 coverage/
+.auth/
 
 # editor
 .vscode/
@@ -20,3 +21,6 @@ coverage/
 # misc
 .DS_Store
 *.log
+
+test-results/
+.playwright-mcp/

@@ -5,7 +5,8 @@ import { signInSchema, resetPasswordSchema } from "../schemas/auth";
 import { trackLoginError } from "../analytics";
 
 const Login = () => {
-  const { loginWithGithub, loginWithGoogle, signInWithEmail, resetPassword } = useAuth();
+  const { loginWithGithub, loginWithGoogle, signInWithEmail, resetPassword } =
+    useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -37,7 +38,7 @@ const Login = () => {
 
     const result = signInSchema.safeParse({ email, password });
     if (!result.success) {
-      setError(result.error.errors[0].message);
+      setError(result.error.issues[0].message);
       return;
     }
 
@@ -69,17 +70,23 @@ const Login = () => {
 
     const result = resetPasswordSchema.safeParse({ email: forgotEmail });
     if (!result.success) {
-      setForgotMsg({ type: "error", text: result.error.errors[0].message });
+      setForgotMsg({ type: "error", text: result.error.issues[0].message });
       return;
     }
 
     setForgotLoading(true);
     try {
       await resetPassword(forgotEmail);
-      setForgotMsg({ type: "success", text: "Password reset link sent. Check your email." });
+      setForgotMsg({
+        type: "success",
+        text: "Password reset link sent. Check your email.",
+      });
     } catch {
       // Generic message to prevent email enumeration (OWASP A07)
-      setForgotMsg({ type: "success", text: "If an account exists with that email, a reset link has been sent." });
+      setForgotMsg({
+        type: "success",
+        text: "If an account exists with that email, a reset link has been sent.",
+      });
     } finally {
       setForgotLoading(false);
     }
@@ -115,7 +122,9 @@ const Login = () => {
 
         <form className="login-form" onSubmit={handleEmailSubmit} noValidate>
           <div className="login-field">
-            <label className="login-field-label" htmlFor="login-email">Email Address</label>
+            <label className="login-field-label" htmlFor="login-email">
+              Email Address
+            </label>
             <input
               id="login-email"
               type="email"
@@ -126,7 +135,9 @@ const Login = () => {
             />
           </div>
           <div className="login-field">
-            <label className="login-field-label" htmlFor="login-password">Password</label>
+            <label className="login-field-label" htmlFor="login-password">
+              Password
+            </label>
             <input
               id="login-password"
               type="password"
@@ -148,7 +159,10 @@ const Login = () => {
             <button
               type="button"
               className="login-forgot"
-              onClick={() => { setShowForgot(true); setForgotEmail(email); }}
+              onClick={() => {
+                setShowForgot(true);
+                setForgotEmail(email);
+              }}
             >
               Forgot password?
             </button>
@@ -219,14 +233,33 @@ const Login = () => {
       </footer>
 
       {showForgot && (
-        <div className="modal-overlay" onClick={() => setShowForgot(false)}>
-          <div className="modal-card glass-card" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal-overlay"
+          role="button"
+          tabIndex={0}
+          onClick={() => setShowForgot(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") setShowForgot(false);
+          }}
+        >
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+          <div
+            className="modal-card glass-card"
+            role="dialog"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
             <h2>Reset Password</h2>
             <p className="login-subtitle">
               Enter your email and we'll send you a reset link.
             </p>
             {forgotMsg && (
-              <p className={forgotMsg.type === "error" ? "login-error" : "login-success"}>
+              <p
+                className={
+                  forgotMsg.type === "error" ? "login-error" : "login-success"
+                }
+              >
                 {forgotMsg.text}
               </p>
             )}
@@ -245,7 +278,11 @@ const Login = () => {
                   autoComplete="email"
                 />
               </div>
-              <button type="submit" className="btn-signin" disabled={forgotLoading}>
+              <button
+                type="submit"
+                className="btn-signin"
+                disabled={forgotLoading}
+              >
                 {forgotLoading ? "Sending..." : "Send Reset Link"}
               </button>
             </form>
