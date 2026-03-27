@@ -28,6 +28,7 @@ ENV REACT_APP_API_URL=/api
 COPY public/ public/
 COPY src/ src/
 
+ENV DISABLE_ESLINT_PLUGIN=true
 RUN npm run build
 
 # Stage 2: Serve
