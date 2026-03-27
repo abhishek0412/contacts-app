@@ -1,9 +1,10 @@
 import "./App.css";
 import React, { lazy, Suspense, useEffect } from "react";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { trackPageView } from "./analytics";
 import Header from "./components/Header.js";
+import ProtectedRoute from "./components/ProtectedRoute.js";
 import Notification from "./components/ui/Notification.js";
 import ErrorBoundary from "./components/ui/ErrorBoundary.js";
 
@@ -11,12 +12,6 @@ const Login = lazy(() => import("./pages/Login.js"));
 const ContactList = lazy(() => import("./pages/ContactList.js"));
 const AddContacts = lazy(() => import("./pages/AddContacts.js"));
 const ContactDetail = lazy(() => import("./pages/ContactDetail.js"));
-
-function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  return user ? children : <Navigate to="/login" />;
-}
 
 function App() {
   const { user, loading } = useAuth();

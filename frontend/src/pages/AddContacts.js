@@ -2,17 +2,9 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { contactSchema } from "../schemas/contact";
 import { useAddContactMutation } from "../features/apiSlice";
 import { trackContactAdded } from "../analytics";
-
-const contactSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  phone: z
-    .string()
-    .min(10, "Phone number must be at least 10 characters")
-    .regex(/^[\d\s()+-]+$/, "Invalid phone number format"),
-});
 
 const AddContacts = () => {
   const [addContact, { isLoading }] = useAddContactMutation();

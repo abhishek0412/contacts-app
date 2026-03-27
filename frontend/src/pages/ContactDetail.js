@@ -1,14 +1,13 @@
 import React from "react";
 import { useParams, Link } from "react-router-dom";
-import { useGetContactsQuery } from "../features/apiSlice";
+import { useGetContactQuery } from "../features/apiSlice";
 import { getInitials } from "../hooks/useContactHelpers";
 import { ContactDetailSkeleton } from "../components/ui/Skeleton";
 import { trackContactViewed } from "../analytics";
 
 const ContactDetail = () => {
   const { id } = useParams();
-  const { data: contacts = [], isLoading } = useGetContactsQuery();
-  const contact = contacts.find((c) => String(c.id) === id);
+  const { data: contact, isLoading, error } = useGetContactQuery(id);
 
   React.useEffect(() => {
     if (contact) trackContactViewed(id);
@@ -18,7 +17,7 @@ const ContactDetail = () => {
     return <ContactDetailSkeleton />;
   }
 
-  if (!contact) {
+  if (error || !contact) {
     return (
       <div className="glass-card" style={{ textAlign: "center" }}>
         <h2>Contact not found</h2>

@@ -1,5 +1,6 @@
 export {
   useGetContactsQuery,
+  useGetContactQuery,
   useAddContactMutation,
   useDeleteContactMutation,
 } from "./apiSlice";

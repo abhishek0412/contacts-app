@@ -8,6 +8,9 @@ RUN npm ci --omit=dev
 
 # Copy source
 COPY server.js ./
+COPY config/ config/
+COPY middleware/ middleware/
+COPY routes/ routes/
 COPY db/ db/
 
 # Run as built-in non-root user

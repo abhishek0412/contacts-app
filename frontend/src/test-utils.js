@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import { configureStore } from "@reduxjs/toolkit";
 import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
 import { contactsApi } from "./features/apiSlice";
 import notificationReducer from "./features/notificationSlice";
 
@@ -26,7 +27,9 @@ export function renderWithProviders(
   function Wrapper({ children }) {
     return (
       <Provider store={store}>
-        <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+        <AuthProvider>
+          <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+        </AuthProvider>
       </Provider>
     );
   }

@@ -3,6 +3,18 @@ import { screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "./test-utils";
 import App from "./App";
 
+// Mock AuthContext to provide an authenticated user
+jest.mock("./contexts/AuthContext", () => ({
+  AuthProvider: ({ children }) => children,
+  useAuth: () => ({
+    user: { uid: "test-user", displayName: "Test User" },
+    loading: false,
+    loginWithGithub: jest.fn(),
+    loginWithGoogle: jest.fn(),
+    logout: jest.fn(),
+  }),
+}));
+
 describe("App", () => {
   it("renders the header", () => {
     renderWithProviders(<App />);

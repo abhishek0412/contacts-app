@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
 import {
   useGetContactsQuery,
   useDeleteContactMutation,
 } from "../features/apiSlice";
-import { getInitials } from "../hooks/useContactHelpers";
+import SearchInput from "../components/SearchInput";
+import Pagination from "../components/Pagination";
+import ContactItem from "../components/ContactItem";
 import ConfirmDialog from "../components/ui/ConfirmDialog";
 import { ContactListSkeleton } from "../components/ui/Skeleton";
 import {
@@ -68,46 +69,10 @@ const ContactList = () => {
     );
   }
 
-  const renderContactList = paginatedContacts.map((contact) => {
-    return (
-      <Link
-        to={`/contacts/${contact.id}`}
-        className="contact-item"
-        key={contact.id}
-      >
-        <div className="contact-info">
-          <div className="contact-avatar">{getInitials(contact.name)}</div>
-          <div className="contact-details">
-            <h3>{contact.name}</h3>
-            <p>{contact.phone}</p>
-          </div>
-        </div>
-        <button
-          className="btn-delete"
-          aria-label={`Delete ${contact.name}`}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setDeleteId(contact.id);
-          }}
-        >
-          &#x1f5d1;
-        </button>
-      </Link>
-    );
-  });
-
   return (
     <div className="glass-card contact-list-card">
       <h2>Contacts</h2>
-      <input
-        type="text"
-        className="search-input"
-        placeholder="Search contacts..."
-        aria-label="Search contacts"
-        value={searchTerm}
-        onChange={handleSearch}
-      />
+      <SearchInput value={searchTerm} onChange={handleSearch} />
       {filteredContacts.length === 0 ? (
         <div className="empty-state" role="status">
           {contacts.length === 0
@@ -116,40 +81,25 @@ const ContactList = () => {
         </div>
       ) : (
         <>
-          {renderContactList}
-          {totalPages > 1 && (
-            <div
-              className="pagination"
-              role="navigation"
-              aria-label="Pagination"
-            >
-              <button
-                className="page-btn"
-                disabled={currentPage === 1}
-                onClick={() => {
-                  setCurrentPage((p) => p - 1);
-                  trackPageChange(currentPage - 1, totalPages);
-                }}
-                aria-label="Previous page"
-              >
-                &laquo; Prev
-              </button>
-              <span className="page-info" aria-current="page">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                className="page-btn"
-                disabled={currentPage === totalPages}
-                onClick={() => {
-                  setCurrentPage((p) => p + 1);
-                  trackPageChange(currentPage + 1, totalPages);
-                }}
-                aria-label="Next page"
-              >
-                Next &raquo;
-              </button>
-            </div>
-          )}
+          {paginatedContacts.map((contact) => (
+            <ContactItem
+              key={contact.id}
+              contact={contact}
+              onDelete={setDeleteId}
+            />
+          ))}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPrev={() => {
+              setCurrentPage((p) => p - 1);
+              trackPageChange(currentPage - 1, totalPages);
+            }}
+            onNext={() => {
+              setCurrentPage((p) => p + 1);
+              trackPageChange(currentPage + 1, totalPages);
+            }}
+          />
         </>
       )}
       {deleteId !== null && (
