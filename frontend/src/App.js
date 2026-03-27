@@ -9,6 +9,7 @@ import Notification from "./components/ui/Notification.js";
 import ErrorBoundary from "./components/ui/ErrorBoundary.js";
 
 const Login = lazy(() => import("./pages/Login.js"));
+const SignUp = lazy(() => import("./pages/SignUp.js"));
 const ContactList = lazy(() => import("./pages/ContactList.js"));
 const AddContacts = lazy(() => import("./pages/AddContacts.js"));
 const ContactDetail = lazy(() => import("./pages/ContactDetail.js"));
@@ -47,6 +48,7 @@ function App() {
         >
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<SignUp />} />
             <Route
               element={
                 <ProtectedRoute>

@@ -1,15 +1,22 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { signInSchema, resetPasswordSchema } from "../schemas/auth";
 import { trackLoginError } from "../analytics";
 
 const Login = () => {
-  const { loginWithGithub, loginWithGoogle } = useAuth();
+  const { loginWithGithub, loginWithGoogle, signInWithEmail, resetPassword } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState(null);
 
   const handleOAuth = async (providerFn) => {
     try {
@@ -23,10 +30,59 @@ const Login = () => {
     }
   };
 
-  const handleEmailSubmit = (e) => {
+  const handleEmailSubmit = async (e) => {
     e.preventDefault();
-    // Email/password auth not yet implemented — use OAuth buttons below
-    handleOAuth(loginWithGoogle);
+    setError(null);
+    setSuccess(null);
+
+    const result = signInSchema.safeParse({ email, password });
+    if (!result.success) {
+      setError(result.error.errors[0].message);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await signInWithEmail(email, password);
+      navigate("/");
+    } catch (err) {
+      trackLoginError("email", err.message);
+      if (
+        err.code === "auth/user-not-found" ||
+        err.code === "auth/wrong-password" ||
+        err.code === "auth/invalid-credential"
+      ) {
+        setError("Invalid email or password.");
+      } else if (err.message?.includes("verify your email")) {
+        setSuccess(err.message);
+      } else {
+        setError(err.message || "Something went wrong. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotMsg(null);
+
+    const result = resetPasswordSchema.safeParse({ email: forgotEmail });
+    if (!result.success) {
+      setForgotMsg({ type: "error", text: result.error.errors[0].message });
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      await resetPassword(forgotEmail);
+      setForgotMsg({ type: "success", text: "Password reset link sent. Check your email." });
+    } catch {
+      // Generic message to prevent email enumeration (OWASP A07)
+      setForgotMsg({ type: "success", text: "If an account exists with that email, a reset link has been sent." });
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
@@ -55,8 +111,9 @@ const Login = () => {
         </div>
 
         {error && <p className="login-error">{error}</p>}
+        {success && <p className="login-success">{success}</p>}
 
-        <form className="login-form" onSubmit={handleEmailSubmit}>
+        <form className="login-form" onSubmit={handleEmailSubmit} noValidate>
           <div className="login-field">
             <label className="login-field-label" htmlFor="login-email">Email Address</label>
             <input
@@ -88,12 +145,16 @@ const Login = () => {
               />
               <span>Remember me</span>
             </label>
-            <a href="#forgot" className="login-forgot">
+            <button
+              type="button"
+              className="login-forgot"
+              onClick={() => { setShowForgot(true); setForgotEmail(email); }}
+            >
               Forgot password?
-            </a>
+            </button>
           </div>
-          <button type="submit" className="btn-signin">
-            Sign In
+          <button type="submit" className="btn-signin" disabled={loading}>
+            {loading ? "Signing In..." : "Sign In"}
           </button>
         </form>
 
@@ -144,7 +205,7 @@ const Login = () => {
         </div>
 
         <p className="login-signup">
-          Don't have an account? <a href="#signup">Sign up</a>
+          Don't have an account? <Link to="/signup">Sign up</Link>
         </p>
         <p className="login-footer">
           Your contacts are private and secured with OAuth 2.0
@@ -156,6 +217,48 @@ const Login = () => {
         <span className="footer-sep">•</span> Terms{" "}
         <span className="footer-sep">•</span> Help
       </footer>
+
+      {showForgot && (
+        <div className="modal-overlay" onClick={() => setShowForgot(false)}>
+          <div className="modal-card glass-card" onClick={(e) => e.stopPropagation()}>
+            <h2>Reset Password</h2>
+            <p className="login-subtitle">
+              Enter your email and we'll send you a reset link.
+            </p>
+            {forgotMsg && (
+              <p className={forgotMsg.type === "error" ? "login-error" : "login-success"}>
+                {forgotMsg.text}
+              </p>
+            )}
+            <form onSubmit={handleForgotPassword}>
+              <div className="login-field">
+                <label className="login-field-label" htmlFor="forgot-email">
+                  Email Address
+                </label>
+                <input
+                  id="forgot-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  className="login-field-input"
+                  autoComplete="email"
+                />
+              </div>
+              <button type="submit" className="btn-signin" disabled={forgotLoading}>
+                {forgotLoading ? "Sending..." : "Send Reset Link"}
+              </button>
+            </form>
+            <button
+              className="modal-close"
+              onClick={() => setShowForgot(false)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
