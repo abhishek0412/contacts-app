@@ -13,8 +13,9 @@ Contact Manager is a full-stack contacts app with Firebase OAuth on the frontend
 ## Stack
 
 - Frontend: React, Redux Toolkit, RTK Query, React Router, Firebase Web SDK, Zod
-- Backend: Node.js, Express, PostgreSQL, Firebase Admin SDK, Swagger
-- Runtime: Nginx (SPA + proxy), Docker Compose
+- Backend: Node.js, Express, PostgreSQL, Redis, Firebase Admin SDK, Swagger
+- Caching: Redis (response cache, rate limit store, token verification cache), Nginx proxy cache
+- Runtime: Nginx (SPA + proxy + rate limiting), Docker Compose
 - Testing: Jest, Supertest, Playwright
 
 ## Quick Start (Recommended)
@@ -43,6 +44,7 @@ docker compose ps
 - Frontend: http://localhost:3000
 - API: http://localhost:3001
 - Swagger: http://localhost:3001/api-docs
+- Redis: localhost:6379
 
 > [!NOTE]
 > Firebase values are baked into the frontend build. If you change REACT*APP_FIREBASE*\* values, rebuild frontend:
@@ -86,6 +88,7 @@ REACT_APP_FIREBASE_MEASUREMENT_ID=your_measurement_id
 ```env
 PORT=3001
 DATABASE_URL=postgresql://contacts_user:contacts_pass@localhost:5432/contacts
+REDIS_URL=redis://localhost:6379
 FIREBASE_PROJECT_ID=your_firebase_project_id
 CORS_ORIGIN=http://localhost:3000
 ```

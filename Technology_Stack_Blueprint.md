@@ -1,6 +1,6 @@
 # Technology Stack Blueprint
 
-Generated: March 17, 2026  
+Generated: March 27, 2026  
 Project: contacts-app  
 Depth: Comprehensive  
 Source of truth: Current workspace code and configuration files
@@ -51,6 +51,8 @@ Source of truth: Current workspace code and configuration files
 | pg                 |                       ^8.20.0 | PostgreSQL client/pool                |
 | firebase-admin     |                       ^13.7.0 | Token verification and identity trust |
 | express-rate-limit |                        ^8.3.1 | API throttling                        |
+| ioredis            |                       ^5.10.1 | Redis client for caching and state    |
+| rate-limit-redis   |                        ^4.3.1 | Redis store for express-rate-limit    |
 | swagger-jsdoc      |                        ^6.2.8 | OpenAPI generation                    |
 | swagger-ui-express |                        ^5.0.1 | Swagger UI hosting                    |
 
@@ -70,6 +72,7 @@ Source of truth: Current workspace code and configuration files
 | node:22-alpine     |         image tag | Frontend build stage and API runtime |
 | nginx:1.27-alpine  |         image tag | Frontend static hosting/proxy        |
 | postgres:17-alpine |         image tag | Database service                     |
+| redis:7-alpine     |         image tag | Caching, rate limiting, token cache  |
 | Docker Compose     |         v2 syntax | Local orchestration                  |
 | Azure Bicep        | current templates | Azure deployment IaC                 |
 
@@ -127,7 +130,8 @@ Source of truth: Current workspace code and configuration files
 
 - REST-style contacts endpoints
 - Single-file route/controller implementation (current state)
-- Endpoint-specific rate controls for write operations
+- Endpoint-specific rate controls for write operations (Redis-backed)
+- Nginx-level rate limiting as first line of defense (10 req/sec per IP)
 - JSON schema hints and examples via Swagger
 
 ### Data access pattern
@@ -136,6 +140,8 @@ Source of truth: Current workspace code and configuration files
 - Parameterized statements
 - Write validation before DB operation
 - Descending created_at ordering for list retrieval
+- Redis response cache (60s TTL) checked before DB queries
+- Cache invalidated on write operations (POST/DELETE)
 
 ### Frontend state and side-effects pattern
 
@@ -193,8 +199,15 @@ prepareHeaders: async (headers) => {
 ### Token verification (server)
 
 ```javascript
-const token = header.split("Bearer ")[1];
+const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+const cacheKey = `auth:token:${tokenHash}`;
+const cached = await redis.get(cacheKey);
+if (cached) {
+  req.userId = JSON.parse(cached).uid;
+  return next();
+}
 const decoded = await admin.auth().verifyIdToken(token);
+await redis.set(cacheKey, JSON.stringify({ uid: decoded.uid }), "EX", 300);
 req.userId = decoded.uid;
 ```
 
@@ -242,6 +255,7 @@ graph TB
     subgraph API
         EX[Express API]
         FAdmin[Firebase Admin SDK]
+        RD[(Redis)]
         PG[(PostgreSQL)]
     end
 
@@ -253,9 +267,11 @@ graph TB
     NX --> SPA
     SPA -->|OAuth flow| FAuth
     SPA -->|Bearer token| EX
-    EX -->|verifyIdToken| FAdmin
+    NX -->|Rate limit + proxy cache| EX
+    EX -->|Token cache, response cache, rate limits| RD
+    EX -->|verifyIdToken on miss| FAdmin
     FAdmin --> FAuth
-    EX --> PG
+    EX -->|SQL on cache miss| PG
 ```
 
 ## 9. Constraints and Decision Context

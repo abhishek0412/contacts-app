@@ -1,14 +1,15 @@
 # Contact Manager Threat Model (STRIDE)
 
-Last updated: March 17, 2026
+Last updated: March 27, 2026
 
 ## 1. Scope
 
 In scope:
 
-- Frontend SPA and Nginx reverse proxy
+- Frontend SPA and Nginx reverse proxy (including Nginx-level rate limiting and proxy caching)
 - Firebase Authentication integration
 - Express API and token verification middleware
+- Redis caching layer (rate limits, response cache, token verification cache)
 - PostgreSQL data store
 - Docker Compose local runtime
 
@@ -25,6 +26,7 @@ Out of scope:
 - Frontend container (Nginx + React build)
 - Firebase Authentication service
 - API container (Express + Firebase Admin SDK)
+- Redis container (caching and rate limit state)
 - PostgreSQL container
 
 ### Trust boundaries
@@ -32,7 +34,8 @@ Out of scope:
 - TB-1: Browser <-> Frontend/API over network
 - TB-2: Frontend/API <-> Firebase managed service
 - TB-3: API <-> PostgreSQL data boundary
-- TB-4: Container runtime and environment variable/secret boundary
+- TB-4: API <-> Redis cache boundary (trusted internal network)
+- TB-5: Container runtime and environment variable/secret boundary
 
 ## 3. Assets
 
@@ -44,12 +47,16 @@ Out of scope:
 
 ## 4. Existing Security Controls
 
-1. Firebase ID token verification on API routes
+1. Firebase ID token verification on API routes (with Redis-backed cache, 5 min TTL)
 2. User-scoped data queries using user_id from verified token
-3. IP-based rate limits for global and write traffic
+3. Multi-layer rate limiting:
+   - Nginx: 10 req/sec per IP with burst=20 (blocks before reaching Node.js)
+   - Express global: 100 req/15 min per IP (Redis-backed, shared across replicas)
+   - Express writes: 10 req/min per IP (Redis-backed, shared across replicas)
 4. Basic request validation for required write fields
 5. Nginx security headers and CSP
 6. Container health checks and service dependency ordering
+7. Redis-backed response caching with user-scoped keys (prevents cross-user data leakage)
 
 ## 5. STRIDE Analysis
 
@@ -59,11 +66,15 @@ Threats:
 
 1. Stolen bearer token replay from compromised client
 2. Forged token attempts against API
+3. Redis token cache poisoning if Redis is compromised
 
 Current posture:
 
 - Forged tokens are mitigated by Firebase Admin verification
+- Token verification results cached in Redis (5 min TTL) using SHA-256 hash of token as key
+- Only uid is stored in cache (minimal data exposure)
 - Replay risk remains if tokens are stolen from browser context
+- Redis is on internal Docker network only (not exposed to external traffic in production)
 
 Recommended improvements:
 
@@ -136,18 +147,24 @@ Threats:
 
 1. High request volume against API endpoints
 2. Write flooding to exhaust DB/storage capacity
-3. Dependency outages (Firebase or DB) causing degraded service
+3. Dependency outages (Firebase, Redis, or DB) causing degraded service
+4. Redis memory exhaustion from cache flooding
 
 Current posture:
 
-- Global and write rate limits are in place
-- Health checks are in place for container services
+- Multi-layer rate limiting: Nginx (10 req/sec) + Express global and write limits (Redis-backed)
+- Rate limit counters persist across server restarts and are shared across replicas
+- Health checks are in place for all container services (postgres, redis, api)
+- Nginx proxy caching reduces backend load for repeated GET requests
+- Redis response caching prevents repetitive database queries
+- Cache keys are user-scoped, limiting per-user cache size
 
 Recommended improvements:
 
 1. Add uid-aware and endpoint-aware limit strategies
-2. Add DB connection pool tuning and circuit-breaker style safeguards
-3. Add operational runbooks and SLO alerts for health degradation
+2. Add Redis maxmemory policy (allkeys-lru) to prevent memory exhaustion
+3. Add circuit-breaker pattern for Redis failures (fall back to direct DB/Firebase)
+4. Add operational runbooks and SLO alerts for health degradation
 
 ### E: Elevation of Privilege
 

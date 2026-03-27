@@ -1,6 +1,6 @@
 # Contact Manager Architecture
 
-Last updated: March 17, 2026
+Last updated: March 27, 2026
 
 ## 1. System Overview
 
@@ -9,6 +9,7 @@ Contact Manager is a full-stack web application with:
 - React SPA frontend served by Nginx
 - Firebase Authentication (Google and GitHub OAuth)
 - Express API protected by Firebase Admin token verification
+- Redis for caching, rate limiting, and token verification
 - PostgreSQL persistence (per-user contact isolation)
 - Docker Compose local orchestration
 
@@ -18,6 +19,7 @@ Primary local endpoints:
 - API: http://localhost:3001
 - API docs: http://localhost:3001/api-docs
 - Postgres: localhost:5432
+- Redis: localhost:6379
 
 ## 2. High-Level Architecture
 
@@ -27,13 +29,16 @@ graph LR
     FE[Nginx + React SPA]
     FID[Firebase Auth]
     API[Express API]
+    RD[(Redis)]
     PG[(PostgreSQL)]
 
     U -->|HTTPS or HTTP in local| FE
     FE -->|OAuth popup or redirect| FID
+    FE -->|Rate limiting + proxy cache| API
     FE -->|Bearer token in Authorization| API
-    API -->|verifyIdToken| FID
-    API -->|SQL queries| PG
+    API -->|Token cache, response cache, rate limits| RD
+    API -->|verifyIdToken on cache miss| FID
+    API -->|SQL queries on cache miss| PG
 ```
 
 ## 3. Runtime Components
@@ -46,6 +51,8 @@ graph LR
   - Serve static SPA assets
   - Route all non-file paths to index.html
   - Reverse proxy /api/\* to backend service
+  - Nginx-level rate limiting (10 req/sec per IP with burst=20 for API calls)
+  - Nginx-level proxy response caching (60s TTL, keyed per user)
   - Emit security headers (CSP, frame protections, referrer policy, etc.)
 
 ### API container
@@ -53,11 +60,21 @@ graph LR
 - Source: server-api/
 - Runtime: Node.js + Express
 - Responsibilities:
-  - Validate Firebase ID tokens
+  - Validate Firebase ID tokens (with Redis-backed token cache, 5 min TTL)
   - Enforce user-level data scoping on all contact routes
   - Validate request payload basics for write operations
   - Expose Swagger docs and health endpoint
-  - Enforce global and write-specific rate limits
+  - Enforce global and write-specific rate limits (Redis-backed store)
+  - Cache API responses in Redis (60s TTL, invalidated on writes)
+
+### Redis container
+
+- Engine: Redis 7 (alpine)
+- Persistent volume: redisdata
+- Used for:
+  - Rate limit counter storage (shared across restarts and replicas)
+  - API response caching (GET /contacts, GET /contacts/:id)
+  - Firebase token verification caching (SHA-256 hashed token key)
 
 ### Database container
 
@@ -98,9 +115,10 @@ Authentication flow:
 
 1. Frontend obtains Firebase user session
 2. Frontend sends ID token as Bearer token
-3. API verifies token via Firebase Admin SDK
-4. API maps decoded uid to req.userId
-5. SQL queries enforce WHERE user_id = req.userId
+3. API hashes token (SHA-256) and checks Redis cache
+4. On cache miss, API verifies token via Firebase Admin SDK and caches result (5 min TTL)
+5. API maps decoded uid to req.userId
+6. SQL queries enforce WHERE user_id = req.userId
 
 ## 6. Data Model
 
@@ -115,14 +133,16 @@ contacts table:
 Index:
 
 - idx_contacts_user_id on user_id
+- idx_contacts_user_created on (user_id, created_at DESC)
 
 ## 7. Deployment and Delivery
 
 Local orchestration:
 
-- docker-compose.yml defines frontend, api, postgres
+- docker-compose.yml defines frontend, api, redis, postgres
 - Health-based startup ordering:
-  - api waits for postgres healthy
+  - redis starts independently with health check
+  - api waits for postgres healthy and redis healthy
   - frontend waits for api healthy
 
 CI/CD:
@@ -137,13 +157,23 @@ CI/CD:
 
 ### Security
 
-- Firebase token verification on API
+- Firebase token verification on API (cached in Redis for 5 min)
 - User-scoped SQL access control
 - CORS handling for localhost origins
-- Rate limiting:
-  - Global: 100 requests per 15 minutes per IP
-  - Writes: 10 requests per minute per IP
+- Rate limiting (multi-layer):
+  - Nginx: 10 req/sec per IP with burst=20 (first line of defense)
+  - Express global: 100 requests per 15 minutes per IP (Redis-backed)
+  - Express writes: 10 requests per minute per IP (Redis-backed)
 - Nginx security headers and CSP
+
+### Caching
+
+- Nginx proxy cache: GET API responses cached 60s (keyed per URI + Authorization header)
+- Redis response cache: GET /contacts and GET /contacts/:id cached 60s (keyed per user_id)
+- Redis token cache: verified Firebase tokens cached 5 min (keyed by SHA-256 hash)
+- Browser static asset cache: 1 year immutable for JS/CSS/images
+- RTK Query client-side cache with tag-based invalidation
+- Cache invalidation: POST and DELETE clear Redis caches for affected user
 
 ### Reliability
 
