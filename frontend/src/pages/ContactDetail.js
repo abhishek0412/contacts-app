@@ -1,21 +1,40 @@
 import React from "react";
-import { useParams, Link } from "react-router-dom";
-import { useGetContactQuery } from "../features/apiSlice";
-import { getInitials } from "../hooks/useContactHelpers";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import {
+  useGetContactQuery,
+  useDeleteContactMutation,
+} from "../features/apiSlice";
+import { ContactHero, ContactInfoGrid } from "../components/contacts";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
 import { ContactDetailSkeleton } from "../components/ui/Skeleton";
-import { trackContactViewed } from "../analytics";
+import { usePageTitle } from "../hooks";
+import {
+  trackContactViewed,
+  trackContactDeleted,
+  trackDeleteConfirmed,
+  trackDeleteCancelled,
+} from "../analytics";
 
 const ContactDetail = () => {
+  usePageTitle("Contact Detail");
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data: contact, isLoading, error } = useGetContactQuery(id);
+  const [deleteContact] = useDeleteContactMutation();
+  const [showDelete, setShowDelete] = React.useState(false);
 
   React.useEffect(() => {
     if (contact) trackContactViewed(id);
   }, [id, contact]);
 
-  if (isLoading) {
-    return <ContactDetailSkeleton />;
-  }
+  const handleDelete = async () => {
+    await deleteContact(id);
+    trackContactDeleted();
+    trackDeleteConfirmed();
+    navigate("/");
+  };
+
+  if (isLoading) return <ContactDetailSkeleton />;
 
   if (error || !contact) {
     return (
@@ -30,15 +49,33 @@ const ContactDetail = () => {
 
   return (
     <div>
-      <div className="contact-detail-card">
-        <div className="detail-avatar">{getInitials(contact.name)}</div>
-        <h3>{contact.name}</h3>
-        <p>{contact.phone}</p>
-        {contact.email && <p>{contact.email}</p>}
-      </div>
-      <Link to="/" className="btn-back" aria-label="Back to Contacts">
-        &larr; Back to Contacts
+      <Link to="/" className="btn-back-link">
+        ← Back to Contacts
       </Link>
+
+      <ContactHero contact={contact} />
+
+      <div className="detail-delete-bar">
+        <button
+          className="btn-hero btn-hero-delete"
+          onClick={() => setShowDelete(true)}
+        >
+          🗑 Delete
+        </button>
+      </div>
+
+      <ContactInfoGrid contact={contact} />
+
+      {showDelete && (
+        <ConfirmDialog
+          message="Are you sure you want to delete this contact? This action cannot be undone."
+          onConfirm={handleDelete}
+          onCancel={() => {
+            trackDeleteCancelled();
+            setShowDelete(false);
+          }}
+        />
+      )}
     </div>
   );
 };
