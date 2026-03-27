@@ -16,27 +16,28 @@ jest.mock("./contexts/AuthContext", () => ({
 }));
 
 describe("App", () => {
-  it("renders the header", () => {
+  it("renders the sidebar navigation", async () => {
     renderWithProviders(<App />);
-    expect(screen.getByText("Contact Manager")).toBeInTheDocument();
+    expect(await screen.findByText("Contact Manager")).toBeInTheDocument();
   });
 
-  it("renders Contacts and Add New nav links", () => {
+  it("renders Contacts and Add New nav links", async () => {
     renderWithProviders(<App />);
-    expect(screen.getByText(/Contacts/)).toBeInTheDocument();
-    expect(screen.getByText("Add New")).toBeInTheDocument();
+    expect(await screen.findByText("Contact Manager")).toBeInTheDocument();
+    expect(screen.getAllByText("Contacts").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Add New/)).toBeInTheDocument();
   });
 
-  it("renders the app container", () => {
+  it("renders the app layout", () => {
     const { container } = renderWithProviders(<App />);
-    expect(container.querySelector(".app-container")).toBeInTheDocument();
+    expect(container.querySelector(".app-layout")).toBeInTheDocument();
   });
 
   it("renders the add form on /add route", async () => {
     renderWithProviders(<App />, { route: "/add" });
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: "Add Contact" }),
+        screen.getByRole("button", { name: /Save Contact/i }),
       ).toBeInTheDocument();
     });
   });
