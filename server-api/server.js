@@ -4,9 +4,17 @@ const { Pool } = require("pg");
 const admin = require("firebase-admin");
 const swaggerJsdoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
+const Redis = require("ioredis");
+const { RedisStore } = require("rate-limit-redis");
+const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// --- Redis ---
+const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+redis.on("connect", () => console.log("Redis connected"));
+redis.on("error", (err) => console.error("Redis error:", err.message));
 
 // --- Database ---
 const pool = new Pool({
@@ -22,7 +30,7 @@ if (!admin.apps.length) {
   });
 }
 
-// --- Auth Middleware ---
+// --- Auth Middleware (with Redis token cache) ---
 async function authMiddleware(req, res, next) {
   const header = req.headers.authorization;
   if (!header || !header.startsWith("Bearer ")) {
@@ -30,7 +38,17 @@ async function authMiddleware(req, res, next) {
   }
   try {
     const token = header.split("Bearer ")[1];
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const cacheKey = `auth:token:${tokenHash}`;
+
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      req.userId = JSON.parse(cached).uid;
+      return next();
+    }
+
     const decoded = await admin.auth().verifyIdToken(token);
+    await redis.set(cacheKey, JSON.stringify({ uid: decoded.uid }), "EX", 300);
     req.userId = decoded.uid;
     next();
   } catch {
@@ -150,6 +168,10 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
+  store: new RedisStore({
+    sendCommand: (...args) => redis.call(...args),
+    prefix: "rl:global:",
+  }),
 });
 
 // Write operations: 10 requests per minute per IP
@@ -159,6 +181,10 @@ const writeLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many write requests. Please try again later." },
+  store: new RedisStore({
+    sendCommand: (...args) => redis.call(...args),
+    prefix: "rl:write:",
+  }),
 });
 
 app.use(globalLimiter);
@@ -187,10 +213,15 @@ app.use(globalLimiter);
  */
 // GET /contacts
 app.get("/contacts", authMiddleware, async (req, res) => {
+  const cacheKey = `cache:contacts:${req.userId}`;
+  const cached = await redis.get(cacheKey);
+  if (cached) return res.json(JSON.parse(cached));
+
   const { rows } = await pool.query(
     "SELECT id, name, phone FROM contacts WHERE user_id = $1 ORDER BY created_at DESC",
     [req.userId],
   );
+  await redis.set(cacheKey, JSON.stringify(rows), "EX", 60);
   res.json(rows);
 });
 
@@ -224,12 +255,17 @@ app.get("/contacts", authMiddleware, async (req, res) => {
  */
 // GET /contacts/:id
 app.get("/contacts/:id", authMiddleware, async (req, res) => {
+  const cacheKey = `cache:contact:${req.userId}:${req.params.id}`;
+  const cached = await redis.get(cacheKey);
+  if (cached) return res.json(JSON.parse(cached));
+
   const { rows } = await pool.query(
     "SELECT id, name, phone FROM contacts WHERE id = $1 AND user_id = $2",
     [req.params.id, req.userId],
   );
   if (rows.length === 0)
     return res.status(404).json({ error: "Contact not found" });
+  await redis.set(cacheKey, JSON.stringify(rows[0]), "EX", 60);
   res.json(rows[0]);
 });
 
@@ -290,6 +326,8 @@ app.post("/contacts", authMiddleware, writeLimiter, async (req, res) => {
     "INSERT INTO contacts (user_id, name, phone) VALUES ($1, $2, $3) RETURNING id, name, phone",
     [req.userId, name, phone],
   );
+  // Invalidate contacts list cache for this user
+  await redis.del(`cache:contacts:${req.userId}`);
   res.status(201).json(rows[0]);
 });
 
@@ -327,6 +365,9 @@ app.delete("/contacts/:id", authMiddleware, writeLimiter, async (req, res) => {
   );
   if (rowCount === 0)
     return res.status(404).json({ error: "Contact not found" });
+  // Invalidate both list and detail caches for this user
+  await redis.del(`cache:contacts:${req.userId}`);
+  await redis.del(`cache:contact:${req.userId}:${req.params.id}`);
   res.json({});
 });
 

@@ -1,5 +1,31 @@
 const request = require("supertest");
 
+// --- Mock Redis (ioredis) ---
+const mockRedisInstance = {
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue("OK"),
+  del: jest.fn().mockResolvedValue(1),
+  call: jest.fn().mockResolvedValue(null),
+  on: jest.fn(),
+};
+jest.mock("ioredis", () => {
+  return jest.fn(() => mockRedisInstance);
+});
+
+// --- Mock rate-limit-redis ---
+jest.mock("rate-limit-redis", () => ({
+  RedisStore: jest.fn().mockImplementation(() => ({
+    init: jest.fn(),
+    increment: jest
+      .fn()
+      .mockResolvedValue({ totalHits: 1, resetTime: new Date() }),
+    decrement: jest.fn().mockResolvedValue(),
+    resetKey: jest.fn().mockResolvedValue(),
+    resetAll: jest.fn().mockResolvedValue(),
+    get: jest.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 // --- Mock Firebase Admin ---
 const TEST_USER_ID = "test-firebase-uid-123";
 jest.mock("firebase-admin", () => {
@@ -32,6 +58,11 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  // Reset Redis mocks between tests
+  mockRedisInstance.get.mockResolvedValue(null);
+  mockRedisInstance.set.mockClear();
+  mockRedisInstance.del.mockClear();
+
   // Clean and seed test data for each test
   await pool.query("DELETE FROM contacts WHERE user_id = $1", [TEST_USER_ID]);
   await pool.query(
