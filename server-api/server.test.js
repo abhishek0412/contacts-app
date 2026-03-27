@@ -45,14 +45,25 @@ let app, pool;
 
 beforeAll(async () => {
   ({ app, pool } = require("./server"));
-  // Ensure the contacts table exists
+  // Drop and recreate with the new schema for tests
+  await pool.query(`DROP TABLE IF EXISTS contacts`);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS contacts (
+    CREATE TABLE contacts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id VARCHAR(128) NOT NULL,
-      name VARCHAR(255) NOT NULL,
+      first_name VARCHAR(100) NOT NULL,
+      last_name VARCHAR(100) NOT NULL DEFAULT '',
+      name VARCHAR(201) GENERATED ALWAYS AS (TRIM(first_name || ' ' || last_name)) STORED,
+      email VARCHAR(255),
       phone VARCHAR(50) NOT NULL,
-      created_at TIMESTAMP DEFAULT NOW()
+      company VARCHAR(255),
+      is_favorite BOOLEAN DEFAULT false,
+      personal JSONB DEFAULT '{}',
+      address JSONB DEFAULT '{}',
+      professional JSONB DEFAULT '{}',
+      profile_photo_url TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 });
@@ -66,10 +77,10 @@ beforeEach(async () => {
   // Clean and seed test data for each test
   await pool.query("DELETE FROM contacts WHERE user_id = $1", [TEST_USER_ID]);
   await pool.query(
-    `INSERT INTO contacts (user_id, name, phone) VALUES
-     ($1, 'Jane Smith', '(555) 234-5678'),
-     ($1, 'Alice Johnson', '(555) 345-6789'),
-     ($1, 'Bob Williams', '(555) 456-7890')`,
+    `INSERT INTO contacts (user_id, first_name, last_name, phone, email, company) VALUES
+     ($1, 'Jane', 'Smith', '(555) 234-5678', 'jane@test.com', 'TestCorp'),
+     ($1, 'Alice', 'Johnson', '(555) 345-6789', 'alice@test.com', 'DevStudio'),
+     ($1, 'Bob', 'Williams', '(555) 456-7890', 'bob@test.com', 'CloudNine')`,
     [TEST_USER_ID],
   );
 });
@@ -100,30 +111,38 @@ describe("Authentication", () => {
 // --- GET /contacts ---
 
 describe("GET /contacts", () => {
-  it("should return all contacts for the authenticated user", async () => {
+  it("should return paginated contacts for the authenticated user", async () => {
     const res = await request(app)
       .get("/contacts")
       .set("Authorization", TEST_TOKEN);
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBe(3);
+    expect(res.body).toHaveProperty("contacts");
+    expect(res.body).toHaveProperty("total", 3);
+    expect(res.body).toHaveProperty("page", 1);
+    expect(res.body).toHaveProperty("totalPages");
+    expect(Array.isArray(res.body.contacts)).toBe(true);
+    expect(res.body.contacts.length).toBe(3);
   });
 
-  it("should return contacts with id, name, and phone fields", async () => {
+  it("should return contacts with required fields", async () => {
     const res = await request(app)
       .get("/contacts")
       .set("Authorization", TEST_TOKEN);
-    const contact = res.body[0];
+    const contact = res.body.contacts[0];
     expect(contact).toHaveProperty("id");
+    expect(contact).toHaveProperty("first_name");
+    expect(contact).toHaveProperty("last_name");
     expect(contact).toHaveProperty("name");
     expect(contact).toHaveProperty("phone");
+    expect(contact).toHaveProperty("email");
+    expect(contact).toHaveProperty("company");
   });
 
   it("should not include user_id in the response", async () => {
     const res = await request(app)
       .get("/contacts")
       .set("Authorization", TEST_TOKEN);
-    const contact = res.body[0];
+    const contact = res.body.contacts[0];
     expect(contact.user_id).toBeUndefined();
   });
 
@@ -135,24 +154,40 @@ describe("GET /contacts", () => {
     expect(res.headers).toHaveProperty("ratelimit-remaining");
     expect(res.headers).toHaveProperty("ratelimit-reset");
   });
+
+  it("should respect page and limit query params", async () => {
+    const res = await request(app)
+      .get("/contacts?page=1&limit=2")
+      .set("Authorization", TEST_TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.contacts.length).toBe(2);
+    expect(res.body.total).toBe(3);
+    expect(res.body.totalPages).toBe(2);
+  });
 });
 
 // --- GET /contacts/:id ---
 
 describe("GET /contacts/:id", () => {
-  it("should return a single contact by ID", async () => {
+  it("should return a single contact by ID with all fields", async () => {
     const listRes = await request(app)
       .get("/contacts")
       .set("Authorization", TEST_TOKEN);
-    const firstId = listRes.body[0].id;
+    const firstId = listRes.body.contacts[0].id;
 
     const res = await request(app)
       .get(`/contacts/${firstId}`)
       .set("Authorization", TEST_TOKEN);
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(firstId);
+    expect(res.body).toHaveProperty("first_name");
+    expect(res.body).toHaveProperty("last_name");
     expect(res.body).toHaveProperty("name");
     expect(res.body).toHaveProperty("phone");
+    expect(res.body).toHaveProperty("email");
+    expect(res.body).toHaveProperty("personal");
+    expect(res.body).toHaveProperty("address");
+    expect(res.body).toHaveProperty("professional");
   });
 
   it("should return 404 for non-existent ID", async () => {
@@ -171,46 +206,55 @@ describe("POST /contacts", () => {
     const res = await request(app)
       .post("/contacts")
       .set("Authorization", TEST_TOKEN)
-      .send({ name: "Test User", phone: "(555) 000-1111" });
+      .send({
+        first_name: "Test",
+        last_name: "User",
+        phone: "(555) 000-1111",
+        email: "test@example.com",
+      });
 
     expect(res.status).toBe(201);
+    expect(res.body.first_name).toBe("Test");
+    expect(res.body.last_name).toBe("User");
     expect(res.body.name).toBe("Test User");
     expect(res.body.phone).toBe("(555) 000-1111");
     expect(res.body).toHaveProperty("id");
   });
 
-  it("should persist the contact to the database", async () => {
+  it("should support backward-compat name field", async () => {
     const res = await request(app)
       .post("/contacts")
       .set("Authorization", TEST_TOKEN)
       .send({ name: "Persist Test", phone: "(555) 111-2222" });
 
+    expect(res.status).toBe(201);
     const { rows } = await pool.query("SELECT * FROM contacts WHERE id = $1", [
       res.body.id,
     ]);
     expect(rows.length).toBe(1);
-    expect(rows[0].name).toBe("Persist Test");
+    expect(rows[0].first_name).toBe("Persist");
+    expect(rows[0].last_name).toBe("Test");
     expect(rows[0].user_id).toBe(TEST_USER_ID);
   });
 
-  it("should return 400 when name is missing", async () => {
+  it("should return 400 when first_name is missing", async () => {
     const res = await request(app)
       .post("/contacts")
       .set("Authorization", TEST_TOKEN)
       .send({ phone: "(555) 000-1111" });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Name and phone are required");
+    expect(res.body.error).toBe("first_name and phone are required");
   });
 
   it("should return 400 when phone is missing", async () => {
     const res = await request(app)
       .post("/contacts")
       .set("Authorization", TEST_TOKEN)
-      .send({ name: "No Phone" });
+      .send({ first_name: "No Phone" });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Name and phone are required");
+    expect(res.body.error).toBe("first_name and phone are required");
   });
 
   it("should return 400 when body is empty", async () => {
@@ -220,57 +264,78 @@ describe("POST /contacts", () => {
       .send({});
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Name and phone are required");
+    expect(res.body.error).toBe("first_name and phone are required");
   });
 
-  it("should return 400 when name is not a string", async () => {
-    const res = await request(app)
-      .post("/contacts")
-      .set("Authorization", TEST_TOKEN)
-      .send({ name: 123, phone: "(555) 000-1111" });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Name and phone are required");
-  });
-
-  it("should return 400 when phone is not a string", async () => {
-    const res = await request(app)
-      .post("/contacts")
-      .set("Authorization", TEST_TOKEN)
-      .send({ name: "Type Test", phone: 5550001111 });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Name and phone are required");
-  });
-
-  it("should only store name and phone (field whitelisting)", async () => {
+  it("should store JSONB fields", async () => {
     const res = await request(app)
       .post("/contacts")
       .set("Authorization", TEST_TOKEN)
       .send({
-        name: "Whitelist Test",
+        first_name: "JSON",
+        last_name: "Test",
         phone: "(555) 333-4444",
-        role: "admin",
+        company: "TestCorp",
+        personal: { nickname: "JT", gender: "Male" },
+        address: { city: "Pune", state: "MH" },
+        professional: { role: "Engineer" },
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.company).toBe("TestCorp");
+    expect(res.body.personal).toEqual({ nickname: "JT", gender: "Male" });
+    expect(res.body.address).toEqual({ city: "Pune", state: "MH" });
+    expect(res.body.professional).toEqual({ role: "Engineer" });
+  });
+
+  it("should not leak unexpected fields", async () => {
+    const res = await request(app)
+      .post("/contacts")
+      .set("Authorization", TEST_TOKEN)
+      .send({
+        first_name: "Whitelist",
+        phone: "(555) 333-4444",
         isAdmin: true,
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.name).toBe("Whitelist Test");
-    expect(res.body.phone).toBe("(555) 333-4444");
-    expect(res.body.role).toBeUndefined();
     expect(res.body.isAdmin).toBeUndefined();
-    expect(Object.keys(res.body)).toEqual(["id", "name", "phone"]);
   });
 });
 
 // --- DELETE /contacts/:id ---
+
+describe("PUT /contacts/:id", () => {
+  it("should update a contact", async () => {
+    const listRes = await request(app)
+      .get("/contacts")
+      .set("Authorization", TEST_TOKEN);
+    const target = listRes.body.contacts[0];
+
+    const res = await request(app)
+      .put(`/contacts/${target.id}`)
+      .set("Authorization", TEST_TOKEN)
+      .send({ company: "UpdatedCorp", email: "updated@test.com" });
+    expect(res.status).toBe(200);
+    expect(res.body.company).toBe("UpdatedCorp");
+    expect(res.body.email).toBe("updated@test.com");
+  });
+
+  it("should return 404 for non-existent ID", async () => {
+    const res = await request(app)
+      .put("/contacts/00000000-0000-0000-0000-000000000000")
+      .set("Authorization", TEST_TOKEN)
+      .send({ company: "NoContact" });
+    expect(res.status).toBe(404);
+  });
+});
 
 describe("DELETE /contacts/:id", () => {
   it("should delete a contact and return 200", async () => {
     const listRes = await request(app)
       .get("/contacts")
       .set("Authorization", TEST_TOKEN);
-    const target = listRes.body[0];
+    const target = listRes.body.contacts[0];
 
     const res = await request(app)
       .delete(`/contacts/${target.id}`)
@@ -325,7 +390,10 @@ describe("CORS headers", () => {
 
 describe("Body size limit", () => {
   it("should reject payloads larger than 10KB", async () => {
-    const largePayload = { name: "x".repeat(15000), phone: "(555) 000-0000" };
+    const largePayload = {
+      first_name: "x".repeat(15000),
+      phone: "(555) 000-0000",
+    };
     const res = await request(app)
       .post("/contacts")
       .set("Authorization", TEST_TOKEN)
@@ -342,5 +410,49 @@ describe("Health check", () => {
     const res = await request(app).get("/healthz");
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("ok");
+  });
+});
+
+// --- GET /contacts/stats ---
+
+describe("GET /contacts/stats", () => {
+  it("should return stats for the authenticated user", async () => {
+    const res = await request(app)
+      .get("/contacts/stats")
+      .set("Authorization", TEST_TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("total", 3);
+    expect(res.body).toHaveProperty("recentlyAdded");
+    expect(res.body).toHaveProperty("favorites");
+    expect(res.body).toHaveProperty("companies");
+  });
+});
+
+// --- GET /contacts/search ---
+
+describe("GET /contacts/search", () => {
+  it("should search contacts by name", async () => {
+    const res = await request(app)
+      .get("/contacts/search?q=Jane&field=name")
+      .set("Authorization", TEST_TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBe(1);
+    expect(res.body[0].first_name).toBe("Jane");
+  });
+
+  it("should search contacts across all fields", async () => {
+    const res = await request(app)
+      .get("/contacts/search?q=TestCorp")
+      .set("Authorization", TEST_TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+  });
+
+  it("should return 400 when q is missing", async () => {
+    const res = await request(app)
+      .get("/contacts/search")
+      .set("Authorization", TEST_TOKEN);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Search query (q) is required");
   });
 });

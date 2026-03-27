@@ -11,6 +11,8 @@ COPY server.js ./
 COPY config/ config/
 COPY middleware/ middleware/
 COPY routes/ routes/
+COPY services/ services/
+COPY repositories/ repositories/
 COPY db/ db/
 
 # Run as built-in non-root user
