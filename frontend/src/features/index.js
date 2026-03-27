@@ -1,7 +1,10 @@
 export {
   useGetContactsQuery,
   useGetContactQuery,
+  useGetContactStatsQuery,
+  useSearchContactsQuery,
   useAddContactMutation,
+  useUpdateContactMutation,
   useDeleteContactMutation,
-} from "./apiSlice";
+} from "./contacts/contactsApi";
 export { showNotification, clearNotification } from "./notificationSlice";
