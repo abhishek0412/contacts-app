@@ -46,6 +46,8 @@ COPY --from=build /app/build /usr/share/nginx/html
 # Non-root (nginx alpine supports this)
 RUN chown -R nginx:nginx /usr/share/nginx/html \
     && chown -R nginx:nginx /var/cache/nginx \
+    && mkdir -p /var/cache/nginx/api_cache \
+    && chown -R nginx:nginx /var/cache/nginx/api_cache \
     && chown -R nginx:nginx /var/log/nginx \
     && chown -R nginx:nginx /etc/nginx/conf.d \
     && mkdir -p /etc/nginx/templates \
